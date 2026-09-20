@@ -12,6 +12,14 @@ const PORT = Number(process.env.PORT || 3000);
 
 const TIMEZONE = process.env.CALENDAR_TIMEZONE || "America/Bogota";
 const GOOGLE_ACCOUNT_EMAIL = process.env.GOOGLE_ACCOUNT_EMAIL || "trespilares.co@gmail.com";
+const BOOKING_CALENDAR_ID = process.env.BOOKING_CALENDAR_ID || GOOGLE_ACCOUNT_EMAIL;
+const TEAM_MEMBERS = (process.env.TEAM_MEMBERS || `Tres Pilares|${GOOGLE_ACCOUNT_EMAIL}`)
+  .split(",")
+  .map((entry) => {
+    const [name, email] = entry.split("|").map((v) => String(v || "").trim());
+    return { name: name || email, email: String(email || "").toLowerCase() };
+  })
+  .filter((member) => member.email);
 const GOOGLE_REDIRECT_URI =
   process.env.GOOGLE_REDIRECT_URI ||
   "https://tres-pilares-api-production.up.railway.app/api/google/callback";
@@ -78,10 +86,22 @@ async function ensureSchema() {
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ;
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS calendar_event_id TEXT;
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS meet_link TEXT;
+    ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS assigned_member_name TEXT;
+    ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS assigned_member_email TEXT;
 
-    CREATE UNIQUE INDEX IF NOT EXISTS appointment_requests_active_start_idx
-      ON appointment_requests(start_time)
+    DROP INDEX IF EXISTS appointment_requests_active_start_idx;
+    CREATE INDEX IF NOT EXISTS appointment_requests_member_time_idx
+      ON appointment_requests(assigned_member_email, start_time, end_time)
       WHERE start_time IS NOT NULL AND status <> 'cancelled';
+
+    CREATE TABLE IF NOT EXISTS team_assignment_state (
+      id SMALLINT PRIMARY KEY CHECK (id = 1),
+      last_member_email TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    INSERT INTO team_assignment_state(id, last_member_email)
+    VALUES (1, NULL)
+    ON CONFLICT (id) DO NOTHING;
 
     CREATE TABLE IF NOT EXISTS google_oauth_tokens (
       account_email TEXT PRIMARY KEY,
@@ -151,9 +171,16 @@ function verifyState(state) {
     .createHmac("sha256", keyBuffer())
     .update(payload)
     .digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
-  const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-  return Date.now() - Number(parsed.ts) < 10 * 60 * 1000;
+  const sigBuffer = Buffer.from(sig);
+  const expectedBuffer = Buffer.from(expected);
+  if (sigBuffer.length !== expectedBuffer.length) return false;
+  if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) return false;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    return Date.now() - Number(parsed.ts) < 10 * 60 * 1000;
+  } catch {
+    return false;
+  }
 }
 
 async function saveRefreshToken(refreshToken) {
@@ -218,30 +245,43 @@ function validateDate(date) {
   return { ok: true, ...w };
 }
 
-async function googleBusy(start, end) {
+async function googleBusyByMember(start, end) {
   const calendar = await calendarClient();
   if (!calendar) throw new Error("calendar_not_connected");
+
   const response = await calendar.freebusy.query({
     requestBody: {
       timeMin: start.toUTC().toISO(),
       timeMax: end.toUTC().toISO(),
       timeZone: TIMEZONE,
-      items: [{ id: GOOGLE_ACCOUNT_EMAIL }]
+      items: TEAM_MEMBERS.map((member) => ({ id: member.email }))
     }
   });
-  const data = response.data.calendars?.[GOOGLE_ACCOUNT_EMAIL];
-  if (data?.errors?.length) throw new Error("calendar_access_failed");
-  return (data?.busy || []).map((b) =>
-    Interval.fromDateTimes(
-      DateTime.fromISO(b.start, { setZone: true }),
-      DateTime.fromISO(b.end, { setZone: true })
-    )
-  );
+
+  const result = new Map();
+  for (const member of TEAM_MEMBERS) {
+    const data = response.data.calendars?.[member.email];
+    if (data?.errors?.length) {
+      console.warn("calendar_access_failed", member.email, data.errors);
+      result.set(member.email, null);
+      continue;
+    }
+    result.set(
+      member.email,
+      (data?.busy || []).map((b) =>
+        Interval.fromDateTimes(
+          DateTime.fromISO(b.start, { setZone: true }),
+          DateTime.fromISO(b.end, { setZone: true })
+        )
+      )
+    );
+  }
+  return result;
 }
 
-async function dbBusy(start, end) {
+async function dbBusyByMember(start, end) {
   const result = await pool.query(
-    `SELECT start_time, end_time
+    `SELECT assigned_member_email, start_time, end_time
        FROM appointment_requests
       WHERE status <> 'cancelled'
         AND start_time IS NOT NULL
@@ -250,46 +290,110 @@ async function dbBusy(start, end) {
         AND end_time > $1`,
     [start.toUTC().toISO(), end.toUTC().toISO()]
   );
-  return result.rows.map((r) =>
-    Interval.fromDateTimes(
-      DateTime.fromJSDate(r.start_time, { zone: "utc" }),
-      DateTime.fromJSDate(r.end_time, { zone: "utc" })
-    )
-  );
+
+  const byMember = new Map(TEAM_MEMBERS.map((member) => [member.email, []]));
+  const legacyGlobal = [];
+
+  for (const row of result.rows) {
+    const interval = Interval.fromDateTimes(
+      DateTime.fromJSDate(row.start_time, { zone: "utc" }),
+      DateTime.fromJSDate(row.end_time, { zone: "utc" })
+    );
+    const email = String(row.assigned_member_email || "").toLowerCase();
+    if (email && byMember.has(email)) byMember.get(email).push(interval);
+    else legacyGlobal.push(interval);
+  }
+
+  return { byMember, legacyGlobal };
 }
 
 function overlaps(slot, busy) {
   return busy.some((b) => b.overlaps(slot));
 }
 
+async function getAvailableMembersForSlot(slot, googleBusy, dbBusy) {
+  return TEAM_MEMBERS.filter((member) => {
+    const googleIntervals = googleBusy.get(member.email);
+    if (googleIntervals === null) return false;
+    const dbIntervals = dbBusy.byMember.get(member.email) || [];
+    return !overlaps(slot, googleIntervals || []) &&
+      !overlaps(slot, dbIntervals) &&
+      !overlaps(slot, dbBusy.legacyGlobal);
+  });
+}
+
 async function getAvailability(date) {
   const valid = validateDate(date);
   if (!valid.ok) return valid;
+
   const { start, end } = valid;
-  const busy = [...await googleBusy(start, end), ...await dbBusy(start, end)];
+  const [googleBusy, dbBusy] = await Promise.all([
+    googleBusyByMember(start, end),
+    dbBusyByMember(start, end)
+  ]);
   const earliest = DateTime.now().setZone(TIMEZONE).plus({ hours: MIN_NOTICE_HOURS });
 
   const slots = [];
-  for (let cursor = start; cursor.plus({ minutes: DURATION_MIN }) <= end; cursor = cursor.plus({ minutes: SLOT_MIN })) {
+  for (
+    let cursor = start;
+    cursor.plus({ minutes: DURATION_MIN }) <= end;
+    cursor = cursor.plus({ minutes: SLOT_MIN })
+  ) {
     const slotEnd = cursor.plus({ minutes: DURATION_MIN });
     const slot = Interval.fromDateTimes(cursor, slotEnd);
-    if (cursor >= earliest && !overlaps(slot, busy)) {
+    if (cursor < earliest) continue;
+
+    const availableMembers = await getAvailableMembersForSlot(slot, googleBusy, dbBusy);
+    if (availableMembers.length) {
       slots.push({
         start: cursor.toISO(),
         end: slotEnd.toISO(),
-        label: cursor.setLocale("es").toFormat("h:mm a")
+        label: cursor.setLocale("es").toFormat("h:mm a"),
+        availableCount: availableMembers.length
       });
     }
   }
-  return { ok: true, date, timezone: TIMEZONE, durationMinutes: DURATION_MIN, slots };
+
+  return {
+    ok: true,
+    date,
+    timezone: TIMEZONE,
+    durationMinutes: DURATION_MIN,
+    slots
+  };
 }
 
-async function createCalendarEvent({ name, email, phone, topic, start, end }) {
+async function chooseRoundRobinMember(client, availableMembers) {
+  const state = await client.query(
+    "SELECT last_member_email FROM team_assignment_state WHERE id = 1 FOR UPDATE"
+  );
+  const last = String(state.rows[0]?.last_member_email || "").toLowerCase();
+  const ordered = TEAM_MEMBERS;
+  const startIndex = Math.max(0, ordered.findIndex((m) => m.email === last) + 1);
+
+  let chosen = null;
+  for (let i = 0; i < ordered.length; i += 1) {
+    const candidate = ordered[(startIndex + i) % ordered.length];
+    if (availableMembers.some((m) => m.email === candidate.email)) {
+      chosen = candidate;
+      break;
+    }
+  }
+  chosen ||= availableMembers[0];
+
+  await client.query(
+    "UPDATE team_assignment_state SET last_member_email = $1, updated_at = NOW() WHERE id = 1",
+    [chosen.email]
+  );
+  return chosen;
+}
+
+async function createCalendarEvent({ name, email, phone, topic, start, end, assignedMember }) {
   const calendar = await calendarClient();
   if (!calendar) throw new Error("calendar_not_connected");
 
   const response = await calendar.events.insert({
-    calendarId: GOOGLE_ACCOUNT_EMAIL,
+    calendarId: BOOKING_CALENDAR_ID,
     conferenceDataVersion: 1,
     sendUpdates: "all",
     requestBody: {
@@ -301,11 +405,15 @@ async function createCalendarEvent({ name, email, phone, topic, start, end }) {
         `Email: ${email}`,
         `WhatsApp: ${phone}`,
         `Tema: ${topic}`,
+        `Profesional asignado: ${assignedMember.name} (${assignedMember.email})`,
         "Origen: trespilares.co"
       ].join("\n"),
       start: { dateTime: start.toISO(), timeZone: TIMEZONE },
       end: { dateTime: end.toISO(), timeZone: TIMEZONE },
-      attendees: [{ email }],
+      attendees: [
+        { email },
+        ...(assignedMember.email !== GOOGLE_ACCOUNT_EMAIL ? [{ email: assignedMember.email }] : [])
+      ],
       guestsCanModify: false,
       conferenceData: {
         createRequest: {
@@ -326,7 +434,9 @@ app.get("/health", async (_req, res) => {
       ok: true,
       database: Boolean(pool),
       calendarConnected: Boolean(refreshToken),
-      calendarAccount: GOOGLE_ACCOUNT_EMAIL
+      calendarAccount: GOOGLE_ACCOUNT_EMAIL,
+      bookingCalendar: BOOKING_CALENDAR_ID,
+      teamMemberCount: TEAM_MEMBERS.length
     });
   } catch {
     res.status(503).json({ ok: false });
@@ -440,24 +550,31 @@ app.post("/api/appointments", async (req, res) => {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [start.toUTC().toISO()]);
 
-    const latest = await getAvailability(start.toISODate());
-    const stillFree = latest.ok && latest.slots.some((slot) => slot.start === start.toISO());
-    if (!stillFree) {
+    const [googleBusy, dbBusy] = await Promise.all([
+      googleBusyByMember(valid.start, valid.end),
+      dbBusyByMember(valid.start, valid.end)
+    ]);
+    const requestedSlot = Interval.fromDateTimes(start, end);
+    const availableMembers = await getAvailableMembersForSlot(requestedSlot, googleBusy, dbBusy);
+    if (!availableMembers.length) {
       await client.query("ROLLBACK");
       return res.status(409).json({ ok:false, error:"Ese horario acaba de ocuparse. Elige otro." });
     }
 
-    event = await createCalendarEvent({ name, email, phone, topic, start, end });
+    const assignedMember = await chooseRoundRobinMember(client, availableMembers);
+    event = await createCalendarEvent({ name, email, phone, topic, start, end, assignedMember });
     const id = crypto.randomUUID();
     await client.query(
       `INSERT INTO appointment_requests
-       (id, name, email, phone, topic, preferred_date, preferred_time, start_time, end_time, calendar_event_id, meet_link, source, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'confirmed')`,
+       (id, name, email, phone, topic, preferred_date, preferred_time, start_time, end_time,
+        calendar_event_id, meet_link, assigned_member_name, assigned_member_email, source, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'confirmed')`,
       [
         id, name, email, phone, topic, start.toISODate(),
         start.setLocale("es").toFormat("h:mm a"),
         start.toUTC().toISO(), end.toUTC().toISO(),
-        event.id || null, event.hangoutLink || null, source
+        event.id || null, event.hangoutLink || null,
+        assignedMember.name, assignedMember.email, source
       ]
     );
     await client.query("COMMIT");
@@ -469,6 +586,7 @@ app.post("/api/appointments", async (req, res) => {
       end: end.toISO(),
       meetLink: event.hangoutLink || null,
       calendarEventLink: event.htmlLink || null,
+      assignedTo: assignedMember.name,
       message: "Tu cita quedó confirmada. Revisa tu correo para la invitación de Google Calendar."
     });
   } catch (error) {
@@ -476,7 +594,7 @@ app.post("/api/appointments", async (req, res) => {
     if (event?.id) {
       try {
         const calendar = await calendarClient();
-        await calendar?.events.delete({ calendarId: GOOGLE_ACCOUNT_EMAIL, eventId: event.id, sendUpdates: "none" });
+        await calendar?.events.delete({ calendarId: BOOKING_CALENDAR_ID, eventId: event.id, sendUpdates: "none" });
       } catch {}
     }
     console.error("appointment_booking_failed", error);
