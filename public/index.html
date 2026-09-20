@@ -343,11 +343,43 @@
             <option>Educación</option>
           </select>
         </div>
-        <div class="field"><label for="lead-date">FECHA</label><input id="lead-date" name="date" type="date" required></div>
-        <div class="field"><label for="lead-slot">HORA DISPONIBLE</label>
-          <select id="lead-slot" name="startTime" required disabled>
-            <option value="">Selecciona primero una fecha</option>
-          </select>
+        <div class="booking-meta" aria-label="Detalles de la sesión">
+          <span>30 min</span><span>Google Meet</span><span>Hora de Bogotá</span>
+        </div>
+
+        <div class="scheduler" id="scheduler">
+          <input id="lead-date" name="date" type="hidden" required>
+          <input id="lead-slot" name="startTime" type="hidden" required>
+
+          <div class="scheduler-calendar">
+            <div class="calendar-head">
+              <button class="calendar-nav" id="calendar-prev" type="button" aria-label="Mes anterior">←</button>
+              <div>
+                <strong id="calendar-month">Calendario</strong>
+                <small id="calendar-help">Selecciona un día disponible</small>
+              </div>
+              <button class="calendar-nav" id="calendar-next" type="button" aria-label="Mes siguiente">→</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span><span>Dom</span>
+            </div>
+            <div class="calendar-grid" id="calendar-grid" role="grid" aria-label="Disponibilidad mensual"></div>
+          </div>
+
+          <div class="scheduler-times">
+            <div class="times-head">
+              <strong id="selected-date-label">Elige una fecha</strong>
+              <small id="slot-count">Los horarios aparecerán aquí</small>
+            </div>
+            <div class="time-slots" id="time-slots" aria-live="polite">
+              <div class="scheduler-empty">Selecciona un día disponible en el calendario.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="booking-selection" id="booking-selection" hidden>
+          <span>Tu selección</span>
+          <strong id="booking-selection-text"></strong>
         </div>
         <button class="btn btn-gold" id="lead-submit" style="width:100%;margin-top:7px;border:0" type="submit">Quiero agendar →</button>
         <div class="form-note" id="sent" aria-live="polite">Al enviar tus datos autorizas el contacto para coordinar la conversación inicial.</div>
