@@ -286,10 +286,10 @@
       <form class="form-card" id="lead-form">
         <h3>Conversemos.</h3>
         <p>Déjanos tus datos y conecta este formulario a tu flujo de LeadConnector / GoHighLevel.</p>
-        <div class="field"><label>NOMBRE</label><input required placeholder="Tu nombre"></div>
-        <div class="field"><label>WHATSAPP</label><input required placeholder="+57 300 000 0000"></div>
-        <div class="field"><label>¿QUÉ QUIERES TRABAJAR?</label>
-          <select>
+        <div class="field"><label for="lead-name">NOMBRE</label><input id="lead-name" name="name" required placeholder="Tu nombre" autocomplete="name"></div>
+        <div class="field"><label for="lead-phone">WHATSAPP</label><input id="lead-phone" name="phone" required placeholder="+57 300 000 0000" autocomplete="tel"></div>
+        <div class="field"><label for="lead-topic">¿QUÉ QUIERES TRABAJAR?</label>
+          <select id="lead-topic" name="topic">
             <option>Organizar mi plan financiero</option>
             <option>Protección familiar y patrimonial</option>
             <option>Ahorro e inversión</option>
@@ -297,8 +297,17 @@
             <option>Educación</option>
           </select>
         </div>
-        <button class="btn btn-gold" style="width:100%;margin-top:7px;border:0" type="submit">Quiero agendar →</button>
-        <div class="form-note" id="sent">Al enviar tus datos autorizas el contacto para coordinar la conversación inicial.</div>
+        <div class="field"><label for="lead-date">FECHA PREFERIDA</label><input id="lead-date" name="preferredDate" type="date"></div>
+        <div class="field"><label for="lead-time">HORARIO PREFERIDO</label>
+          <select id="lead-time" name="preferredTime">
+            <option value="">Sin preferencia</option>
+            <option>Mañana</option>
+            <option>Mediodía</option>
+            <option>Tarde</option>
+          </select>
+        </div>
+        <button class="btn btn-gold" id="lead-submit" style="width:100%;margin-top:7px;border:0" type="submit">Quiero agendar →</button>
+        <div class="form-note" id="sent" aria-live="polite">Al enviar tus datos autorizas el contacto para coordinar la conversación inicial.</div>
       </form>
     </div>
   </div>
