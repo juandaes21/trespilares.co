@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tres-pilares",
+  "name": "trespilares",
   "compatibility_date": "2026-09-19",
   "assets": {
     "directory": "./public/"
