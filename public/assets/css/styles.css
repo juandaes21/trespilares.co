@@ -242,7 +242,7 @@ nav.scrolled{
 }
 .contact{padding:110px 0}
 .contact-box{
-  display:grid;grid-template-columns:1.05fr .95fr;gap:50px;background:var(--green);border-radius:34px;padding:64px;color:white;position:relative;overflow:hidden
+  display:grid;grid-template-columns:.82fr 1.18fr;gap:46px;background:var(--green);border-radius:34px;padding:64px;color:white;position:relative;overflow:hidden
 }
 .contact-box:after{
   content:"";position:absolute;width:320px;height:320px;border-radius:50%;background:rgba(198,161,100,.14);right:-90px;top:-100px
@@ -263,6 +263,41 @@ nav.scrolled{
 }
 .field input:focus,.field select:focus{border-color:rgba(18,62,50,.38);box-shadow:0 0 0 3px rgba(18,62,50,.07)}
 .form-note{font-size:.7rem;color:#77817b;margin-top:12px}
+.booking-meta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px}
+.booking-meta span{font-size:.7rem;font-weight:750;color:#52605a;background:#fff;border:1px solid var(--line);border-radius:999px;padding:7px 10px}
+.scheduler{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(170px,.8fr);border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#fff;margin-bottom:16px}
+.scheduler-calendar{padding:18px}
+.calendar-head{display:grid;grid-template-columns:40px 1fr 40px;align-items:center;gap:8px;margin-bottom:16px}
+.calendar-head>div{text-align:center;min-width:0}
+.calendar-head strong{display:block;font-family:var(--serif);font-size:1.1rem;color:var(--green);text-transform:capitalize}
+.calendar-head small,.times-head small{display:block;color:var(--muted);font-size:.68rem;margin-top:3px}
+.calendar-nav{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--paper);color:var(--green);cursor:pointer}
+.calendar-nav:disabled{opacity:.3;cursor:not-allowed}
+.calendar-weekdays,.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.calendar-weekdays{margin-bottom:6px}
+.calendar-weekdays span{text-align:center;font-size:.62rem;color:#8a938e;font-weight:750}
+.calendar-day{aspect-ratio:1;border:0;border-radius:10px;background:transparent;color:#304039;font-size:.78rem;cursor:pointer;position:relative}
+.calendar-day:hover:not(:disabled){background:var(--ivory)}
+.calendar-day.available{font-weight:800;color:var(--green);background:rgba(18,62,50,.06)}
+.calendar-day.available:after{content:"";width:4px;height:4px;border-radius:50%;background:var(--gold);position:absolute;left:50%;bottom:5px;transform:translateX(-50%)}
+.calendar-day.selected{background:var(--green);color:#fff}
+.calendar-day.selected:after{background:var(--gold-soft)}
+.calendar-day.today{box-shadow:inset 0 0 0 1px var(--gold)}
+.calendar-day:disabled,.calendar-day.outside{color:#c4c9c6;cursor:not-allowed;background:transparent}
+.calendar-day.loading{opacity:.55}
+.scheduler-times{border-left:1px solid var(--line);padding:18px;background:#fbfaf6;min-width:0}
+.times-head{margin-bottom:13px}
+.times-head strong{display:block;color:var(--green);font-size:.88rem}
+.time-slots{display:grid;gap:8px;max-height:300px;overflow:auto;padding-right:3px}
+.time-slot{min-height:42px;border:1px solid rgba(18,62,50,.18);border-radius:11px;background:#fff;color:var(--green);font-weight:800;cursor:pointer}
+.time-slot:hover,.time-slot.selected{background:var(--green);color:#fff;border-color:var(--green)}
+.time-slot small{display:block;font-size:.62rem;font-weight:600;opacity:.7;margin-top:2px}
+.scheduler-empty{font-size:.76rem;color:var(--muted);line-height:1.5;padding:14px 0}
+.scheduler-loading{font-size:.76rem;color:var(--muted);padding:14px 0}
+.booking-selection{display:flex;justify-content:space-between;gap:12px;align-items:center;border-radius:12px;background:rgba(198,161,100,.12);padding:12px 14px;margin:0 0 14px}
+.booking-selection span{font-size:.67rem;text-transform:uppercase;letter-spacing:.1em;color:#7d6a48;font-weight:800}
+.booking-selection strong{font-size:.8rem;color:var(--green);text-align:right}
+
 footer{border-top:1px solid var(--line);padding:38px 0 45px}
 .footer-grid{display:grid;grid-template-columns:1.2fr .8fr .8fr;gap:35px}
 .footer-brand strong{display:block;color:var(--green);letter-spacing:.14em;margin-bottom:12px}
@@ -302,6 +337,9 @@ footer p,footer a{font-size:.8rem;color:#758079}
   .step{border-right:0;border-bottom:1px solid rgba(255,255,255,.14);padding:28px 0!important}
   .section-head h2,.audience-copy h2{font-size:3rem}
   .contact-box{padding:38px 22px}
+  .scheduler{grid-template-columns:1fr}
+  .scheduler-times{border-left:0;border-top:1px solid var(--line)}
+  .time-slots{grid-template-columns:repeat(2,minmax(0,1fr));max-height:none}
   .plan-card{padding:34px 26px}
   .stories-heading{grid-template-columns:1fr;gap:22px}
   .story-frame{width:min(100%,300px)}
