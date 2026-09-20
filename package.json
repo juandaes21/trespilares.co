@@ -1,0 +1,13 @@
+{
+  "name": "tres-pilares",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sitio oficial de Tres Pilares — Planificación Patrimonial",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
