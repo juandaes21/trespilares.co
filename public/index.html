@@ -285,8 +285,9 @@
       </div>
       <form class="form-card" id="lead-form">
         <h3>Conversemos.</h3>
-        <p>Déjanos tus datos y conecta este formulario a tu flujo de LeadConnector / GoHighLevel.</p>
+        <p>Elige una fecha y uno de los horarios disponibles. La cita se confirmará directamente en Google Calendar.</p>
         <div class="field"><label for="lead-name">NOMBRE</label><input id="lead-name" name="name" required placeholder="Tu nombre" autocomplete="name"></div>
+        <div class="field"><label for="lead-email">EMAIL</label><input id="lead-email" name="email" type="email" required placeholder="tu@email.com" autocomplete="email"></div>
         <div class="field"><label for="lead-phone">WHATSAPP</label><input id="lead-phone" name="phone" required placeholder="+57 300 000 0000" autocomplete="tel"></div>
         <div class="field"><label for="lead-topic">¿QUÉ QUIERES TRABAJAR?</label>
           <select id="lead-topic" name="topic">
@@ -297,13 +298,10 @@
             <option>Educación</option>
           </select>
         </div>
-        <div class="field"><label for="lead-date">FECHA PREFERIDA</label><input id="lead-date" name="preferredDate" type="date"></div>
-        <div class="field"><label for="lead-time">HORARIO PREFERIDO</label>
-          <select id="lead-time" name="preferredTime">
-            <option value="">Sin preferencia</option>
-            <option>Mañana</option>
-            <option>Mediodía</option>
-            <option>Tarde</option>
+        <div class="field"><label for="lead-date">FECHA</label><input id="lead-date" name="date" type="date" required></div>
+        <div class="field"><label for="lead-slot">HORA DISPONIBLE</label>
+          <select id="lead-slot" name="startTime" required disabled>
+            <option value="">Selecciona primero una fecha</option>
           </select>
         </div>
         <button class="btn btn-gold" id="lead-submit" style="width:100%;margin-top:7px;border:0" type="submit">Quiero agendar →</button>
