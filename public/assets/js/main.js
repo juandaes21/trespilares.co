@@ -257,19 +257,13 @@ if (leadForm) {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'No fue posible confirmar la cita.');
 
-      const confirmation = bookingSelectionText.textContent;
-      leadForm.reset();
-      selectedDate='';
-      selectedSlot='';
-      dateInput.value='';
-      slotInput.value='';
-      bookingSelection.hidden=true;
-      timeSlots.innerHTML='<div class="scheduler-empty">Selecciona un día disponible en el calendario.</div>';
-      selectedDateLabel.textContent='Elige una fecha';
-      slotCount.textContent='Los horarios aparecerán aquí';
-      await loadMonthAvailability();
-      leadStatus.textContent = `Cita confirmada${confirmation ? ' · ' + confirmation : ''}. Revisa tu correo para la invitación de Google Calendar.`;
-      leadStatus.style.color = '#123E32';
+      sessionStorage.setItem('trespilaresBookingConfirmation', JSON.stringify({
+        start: data.start || selectedSlot,
+        assignedTo: data.assignedTo || '',
+        meetLink: data.meetLink || '',
+        calendarEventLink: data.calendarEventLink || ''
+      }));
+      window.location.assign('/gracias/');
     } catch (error) {
       setCalendarStatus(error.message || 'No pudimos confirmar la cita.', true);
       if (selectedDate) await selectDate(selectedDate);
