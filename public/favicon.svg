@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Tres Pilares">
+  <rect width="64" height="64" rx="14" fill="#123E32"/>
+  <g fill="#C6A164">
+    <path d="M13 28.5 22 23v25H13z"/>
+    <path d="M27.5 16 36.5 10.5V48h-9z"/>
+    <path d="M42 28.5 51 23v25h-9z"/>
+  </g>
+</svg>
