@@ -499,6 +499,68 @@ app.get("/api/google/callback", async (req, res) => {
   }
 });
 
+app.get("/api/availability/range", async (req, res) => {
+  const startDate = String(req.query.start || "").trim();
+  const days = Math.min(42, Math.max(1, Number(req.query.days || 31)));
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    return res.status(400).json({ ok:false, error:"Fecha inválida." });
+  }
+
+  const startDay = DateTime.fromISO(startDate, { zone: TIMEZONE }).startOf("day");
+  if (!startDay.isValid) return res.status(400).json({ ok:false, error:"Fecha inválida." });
+
+  const now = DateTime.now().setZone(TIMEZONE);
+  const maxDay = now.plus({ days: MAX_BOOKING_DAYS }).endOf("day");
+  const queryStart = startDay < now.startOf("day") ? now.startOf("day") : startDay;
+  const queryEnd = DateTime.min(startDay.plus({ days }), maxDay.plus({ days: 1 }));
+
+  try {
+    const [googleBusy, dbBusy] = await Promise.all([
+      googleBusyByMember(queryStart, queryEnd),
+      dbBusyByMember(queryStart, queryEnd)
+    ]);
+    const earliest = now.plus({ hours: MIN_NOTICE_HOURS });
+    const dates = {};
+
+    for (let i = 0; i < days; i += 1) {
+      const day = startDay.plus({ days:i });
+      const key = day.toISODate();
+      if (day > maxDay || day < now.startOf("day") || !WORKING_DAYS.has(day.weekday)) {
+        dates[key] = { available:false, slots:0 };
+        continue;
+      }
+
+      const clockStart = parseClock(WORKDAY_START);
+      const clockEnd = parseClock(WORKDAY_END);
+      const dayStart = day.set({ ...clockStart, second:0, millisecond:0 });
+      const dayEnd = day.set({ ...clockEnd, second:0, millisecond:0 });
+
+      let count = 0;
+      for (
+        let cursor = dayStart;
+        cursor.plus({ minutes:DURATION_MIN }) <= dayEnd;
+        cursor = cursor.plus({ minutes:SLOT_MIN })
+      ) {
+        if (cursor < earliest) continue;
+        const slotEnd = cursor.plus({ minutes:DURATION_MIN });
+        const availableMembers = await getAvailableMembersForSlot(
+          Interval.fromDateTimes(cursor, slotEnd),
+          googleBusy,
+          dbBusy
+        );
+        if (availableMembers.length) count += 1;
+      }
+      dates[key] = { available:count > 0, slots:count };
+    }
+
+    res.json({ ok:true, timezone:TIMEZONE, durationMinutes:DURATION_MIN, dates });
+  } catch (error) {
+    console.error("availability_range_failed", error);
+    res.status(503).json({ ok:false, error:"No pudimos consultar la agenda en este momento." });
+  }
+});
+
 app.get("/api/availability", async (req, res) => {
   const date = String(req.query.date || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
