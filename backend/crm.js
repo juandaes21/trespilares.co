@@ -64,6 +64,7 @@ function publicUser(row) {
     role: row.role,
     teamMemberEmail: row.team_member_email || null,
     avatarUrl: row.avatar_url || null,
+    lastLoginAt: row.last_login_at || null,
     active: row.active !== false
   };
 }
