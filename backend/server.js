@@ -3,10 +3,14 @@ import cors from "cors";
 import helmet from "helmet";
 import pg from "pg";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createCrmRouter, ensureCrmSchema, syncAppointmentToCrm } from "./crm.js";
 import { google } from "googleapis";
 import { DateTime, Interval } from "luxon";
 
 const { Pool } = pg;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
@@ -44,6 +48,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
   .filter(Boolean);
 
 app.use(helmet({ contentSecurityPolicy: false }));
+app.use("/crm", express.static(path.join(__dirname, "crm"), { index: "index.html" }));
 app.use(express.json({ limit: "32kb" }));
 app.use(cors({
   origin(origin, cb) {
@@ -60,6 +65,8 @@ const pool = process.env.DATABASE_URL
       ssl: process.env.PGSSL === "disable" ? false : { rejectUnauthorized: false }
     })
   : null;
+
+app.use("/api/crm", createCrmRouter({ pool }));
 
 async function ensureSchema() {
   if (!pool) return;
@@ -590,6 +597,11 @@ app.post("/api/appointments", async (req, res) => {
   const topic = String(body.topic || "").trim();
   const startTime = String(body.startTime || "").trim();
   const source = String(body.source || "website").trim().slice(0, 80);
+  const utmSource = String(body.utmSource || "").trim().slice(0, 120);
+  const utmMedium = String(body.utmMedium || "").trim().slice(0, 120);
+  const utmCampaign = String(body.utmCampaign || "").trim().slice(0, 160);
+  const utmContent = String(body.utmContent || "").trim().slice(0, 160);
+  const referrer = String(body.referrer || "").trim().slice(0, 800);
 
   if (name.length < 2 || name.length > 120) return res.status(400).json({ ok:false, error:"Nombre inválido." });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return res.status(400).json({ ok:false, error:"Email inválido." });
@@ -639,6 +651,26 @@ app.post("/api/appointments", async (req, res) => {
         assignedMember.name, assignedMember.email, source
       ]
     );
+    const crmContactId = await syncAppointmentToCrm(client, {
+      appointmentId: id,
+      name,
+      email,
+      phone,
+      topic,
+      source,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmContent,
+      referrer,
+      assignedMemberEmail: assignedMember.email
+    });
+    await client.query(
+      `UPDATE appointment_requests
+          SET crm_contact_id=$2,utm_source=$3,utm_medium=$4,utm_campaign=$5,utm_content=$6,referrer=$7
+        WHERE id=$1`,
+      [id,crmContactId,utmSource || null,utmMedium || null,utmCampaign || null,utmContent || null,referrer || null]
+    );
     await client.query("COMMIT");
 
     res.status(201).json({
@@ -669,6 +701,7 @@ app.post("/api/appointments", async (req, res) => {
 app.use((_req, res) => res.status(404).json({ ok:false, error:"Not found" }));
 
 ensureSchema()
+  .then(() => ensureCrmSchema(pool))
   .then(() => app.listen(PORT, "0.0.0.0", () => console.log(`Tres Pilares API listening on port ${PORT}`)))
   .catch((error) => {
     console.error("schema_init_failed", error);
