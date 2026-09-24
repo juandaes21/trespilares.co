@@ -87,18 +87,18 @@ async function init() {
     if (error.status !== 401) console.warn(error);
   }
 
-  try {
-    const boot = await api("/bootstrap-status");
-    $("#bootstrap-form").hidden = !boot.needsBootstrap;
-    $("#login-form").hidden = boot.needsBootstrap;
-  } catch {
-    $("#login-form").hidden = false;
-  }
+  const authError = new URLSearchParams(window.location.search).get("auth");
+  const messages = {
+    not_authorized:"Tu cuenta de Google todavía no está autorizada para entrar al CRM.",
+    state:"No pudimos validar el inicio de sesión. Intenta nuevamente.",
+    identity:"La identidad de Google no coincide con el usuario autorizado.",
+    failed:"No pudimos completar el acceso con Google.",
+    missing_code:"El acceso expiró. Intenta nuevamente."
+  };
+  if (authError) setMessage("#login-message", messages[authError] || "No pudimos iniciar sesión.");
 }
 
 function bindGlobalEvents() {
-  $("#login-form")?.addEventListener("submit", login);
-  $("#bootstrap-form")?.addEventListener("submit", bootstrap);
   $("#logout-btn")?.addEventListener("click", logout);
 
   $$(".nav-item").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.view)));
@@ -134,53 +134,9 @@ function fillStageSelects() {
   $("#contact-stage-filter").insertAdjacentHTML("beforeend", options);
 }
 
-async function login(event) {
-  event.preventDefault();
-  setMessage("#login-message","");
-  const form = new FormData(event.currentTarget);
-  try {
-    const data = await api("/auth/login",{
-      method:"POST",
-      body:{ email:form.get("email"), password:form.get("password") }
-    });
-    event.currentTarget.reset();
-    enterApp(data.user);
-  } catch (error) {
-    setMessage("#login-message",error.message);
-  }
-}
-
-async function bootstrap(event) {
-  event.preventDefault();
-  setMessage("#bootstrap-message","");
-  const form = new FormData(event.currentTarget);
-  try {
-    await api("/bootstrap",{
-      method:"POST",
-      headers:{ "X-Bootstrap-Token":String(form.get("token") || "") },
-      body:{
-        name:form.get("name"),
-        email:form.get("email"),
-        password:form.get("password")
-      }
-    });
-    setMessage("#bootstrap-message","CRM activado. Ya puedes iniciar sesión.",true);
-    setTimeout(()=>{
-      event.currentTarget.hidden=true;
-      $("#login-form").hidden=false;
-      $("#login-form [name=email]").value=form.get("email");
-    },700);
-  } catch (error) {
-    setMessage("#bootstrap-message",error.message);
-  }
-}
-
 async function logout() {
   try { await api("/auth/logout",{method:"POST"}); } catch {}
-  state.user=null;
-  $("#app-shell").hidden=true;
-  $("#auth-shell").hidden=false;
-  $("#login-form").hidden=false;
+  window.location.assign("/crm/");
 }
 
 function enterApp(user) {
@@ -695,7 +651,6 @@ async function createUser(event) {
       body:{
         name:form.get("name"),
         email:form.get("email"),
-        password:form.get("password"),
         role:form.get("role")
       }
     });
