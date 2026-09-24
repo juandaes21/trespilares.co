@@ -26,31 +26,19 @@
     </section>
 
     <section class="auth-panel">
-      <form id="login-form" class="auth-card">
+      <div id="login-card" class="auth-card">
         <div>
           <span class="eyebrow">ACCESO PRIVADO</span>
           <h2>Entrar al CRM</h2>
-          <p>Usa tu cuenta interna de Tres Pilares.</p>
+          <p>El acceso está restringido al equipo autorizado de Tres Pilares.</p>
         </div>
-        <label>Email<input name="email" type="email" autocomplete="email" required></label>
-        <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
-        <button class="btn primary" type="submit">Ingresar</button>
+        <a class="btn google-btn" href="/api/crm/auth/google">
+          <span class="google-g">G</span>
+          Continuar con Google
+        </a>
+        <p class="auth-hint">Usa el correo que haya sido habilitado por un administrador.</p>
         <p id="login-message" class="form-message" aria-live="polite"></p>
-      </form>
-
-      <form id="bootstrap-form" class="auth-card" hidden>
-        <div>
-          <span class="eyebrow">PRIMER ACCESO</span>
-          <h2>Activar Tres Pilares CRM</h2>
-          <p>Crea el primer administrador. Esta pantalla desaparecerá después de la activación.</p>
-        </div>
-        <label>Nombre<input name="name" autocomplete="name" required></label>
-        <label>Email<input name="email" type="email" autocomplete="email" required></label>
-        <label>Contraseña<input name="password" type="password" minlength="10" autocomplete="new-password" required></label>
-        <label>Token de activación<input name="token" type="password" required></label>
-        <button class="btn primary" type="submit">Crear administrador</button>
-        <p id="bootstrap-message" class="form-message" aria-live="polite"></p>
-      </form>
+      </div>
     </section>
   </div>
 
@@ -202,7 +190,6 @@
             <form id="team-form" class="form-grid">
               <label>Nombre<input name="name" required></label>
               <label>Email<input name="email" type="email" required></label>
-              <label>Contraseña temporal<input name="password" type="password" minlength="10" required></label>
               <label>Rol<select name="role"><option value="member">Miembro</option><option value="admin">Administrador</option><option value="viewer">Solo lectura</option></select></label>
               <button class="btn primary" type="submit">Crear usuario</button>
               <p id="team-message" class="form-message"></p>
