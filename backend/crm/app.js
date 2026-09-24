@@ -256,7 +256,7 @@ async function loadContacts() {
     renderContactsTable();
     populateTaskContacts();
   } catch (error) {
-    $("#contacts-table").innerHTML='<tr><td colspan="5">'+esc(error.message)+'</td></tr>';
+    $("#contacts-table").innerHTML='<tr><td colspan="6">'+esc(error.message)+'</td></tr>';
   }
 }
 
@@ -265,12 +265,13 @@ function renderContactsTable() {
   body.innerHTML=state.contacts.length ? state.contacts.map(contact=>
     '<tr data-contact-id="'+contact.id+'">'+
       '<td><div class="contact-cell"><strong>'+esc(contact.name)+'</strong><small>'+esc([contact.title,contact.company].filter(Boolean).join(" · ") || "Sin empresa/cargo")+'</small></div></td>'+
+      '<td><span class="stage-badge">'+(contact.target_score ?? "—")+'</span></td>'+
       '<td><span class="stage-badge">'+esc(stageLabel(contact.stage))+'</span></td>'+
       '<td>'+esc(contact.source_channel || "—")+(contact.source_profile ? '<br><small class="muted">'+esc(contact.source_profile)+'</small>' : '')+'</td>'+
       '<td>'+esc(contact.owner_name || "Sin asignar")+'</td>'+
       '<td>'+esc(contact.next_action_at ? fmtDate(contact.next_action_at) : "—")+'</td>'+
     '</tr>'
-  ).join("") : '<tr><td colspan="5">'+empty("No encontramos contactos.")+'</td></tr>';
+  ).join("") : '<tr><td colspan="6">'+empty("No encontramos contactos.")+'</td></tr>';
 
   $$("[data-contact-id]",body).forEach(row=>row.addEventListener("click",()=>openContact(row.dataset.contactId)));
 }
@@ -323,7 +324,9 @@ function renderContactDetail(data) {
         '<div class="fact"><small>Empresa</small><strong>'+esc(c.company||"—")+'</strong></div>'+
         '<div class="fact"><small>Cargo</small><strong>'+esc(c.title||"—")+'</strong></div>'+
         '<div class="fact"><small>Segmento</small><strong>'+esc(c.segment||"—")+'</strong></div>'+
+        '<div class="fact"><small>Score de prospección</small><strong>'+esc(c.target_score ?? "—")+'/100</strong></div>'+
         '<div class="fact"><small>Origen</small><strong>'+esc(c.source_channel||"—")+(c.source_profile?' · '+esc(c.source_profile):'')+'</strong></div>'+
+        '<div class="fact"><small>Criterio</small><strong>'+esc(c.score_reason||"—")+'</strong></div>'+
         '<div class="fact"><small>Último contacto</small><strong>'+esc(c.last_contact_at?fmtDate(c.last_contact_at):"—")+'</strong></div>'+
         '<div class="fact"><small>Próxima acción</small><strong>'+esc(c.next_action_at?fmtDate(c.next_action_at):"—")+'</strong></div>'+
       '</div>'+
@@ -410,6 +413,7 @@ function renderPipeline() {
           '<small>'+esc([c.title,c.company].filter(Boolean).join(" · ") || c.segment || "Sin contexto")+'</small>'+
           '<div class="lead-meta">'+
             (c.source_channel?'<span class="pill">'+esc(c.source_channel)+'</span>':'')+
+            (c.target_score!=null?'<span class="pill">Score '+esc(c.target_score)+'</span>':'')+
             (c.signal?'<span class="pill gold" title="'+esc(c.signal)+'">señal</span>':'')+
           '</div>'+
         '</article>'
