@@ -308,7 +308,7 @@ async function openContact(id) {
 
 function renderContactDetail(data) {
   const c=data.contact;
-  const ownerOptions=state.users.map(u=>'<option value="'+u.id+'" '+(u.id===c.owner_user_id?"selected":"")+'>'+esc(u.name)+'</option>').join("");
+  const ownerOptions=state.users.filter(u=>u.active).map(u=>'<option value="'+u.id+'" '+(u.id===c.owner_user_id?"selected":"")+'>'+esc(u.name)+'</option>').join("");
   const stageOptions=STAGES.map(([key,label])=>'<option value="'+key+'" '+(key===c.stage?"selected":"")+'>'+label+'</option>').join("");
   const timeline=(data.activities||[]).length
     ? data.activities.map(a=>'<div class="timeline-item"><strong>'+esc(a.summary)+'</strong><small>'+esc(a.type)+' · '+fmtDate(a.occurred_at)+(a.created_by_name?' · '+esc(a.created_by_name):'')+'</small></div>').join("")
@@ -637,9 +637,45 @@ async function createContent(event) {
 function renderTeam() {
   const target=$("#team-list");
   if(!target) return;
-  target.innerHTML=state.users.length ? state.users.map(user=>
-    '<div class="stack-item"><span class="stack-icon">'+initials(user.name)+'</span><div class="stack-main"><strong>'+esc(user.name)+'</strong><small>'+esc(user.email)+' · '+esc(user.role)+'</small></div><span class="stage-badge">'+(user.active?"Activo":"Inactivo")+'</span></div>'
-  ).join("") : empty("No hay usuarios.");
+
+  target.innerHTML=state.users.length ? state.users.map(user=>{
+    const isSelf=user.id===state.user?.id;
+    const canManage=state.user?.role==="admin" && !isSelf;
+    const action=canManage
+      ? '<button class="text-action '+(user.active?'danger-action':'')+'" data-toggle-user="'+user.id+'" data-next-active="'+(!user.active)+'">'+(user.active?'Quitar acceso':'Reactivar')+'</button>'
+      : isSelf
+        ? '<span class="muted" style="font-size:.7rem">Tu cuenta</span>'
+        : '';
+
+    return '<div class="stack-item">'+
+      '<span class="stack-icon">'+initials(user.name)+'</span>'+
+      '<div class="stack-main"><strong>'+esc(user.name)+'</strong><small>'+esc(user.email)+' · '+esc(user.role)+(user.lastLoginAt?' · Último acceso '+fmtDate(user.lastLoginAt):'')+'</small></div>'+
+      '<span class="stage-badge">'+(user.active?'Activo':'Sin acceso')+'</span>'+
+      action+
+    '</div>';
+  }).join("") : empty("No hay usuarios.");
+
+  $("[data-toggle-user]",target).forEach(btn=>btn.addEventListener("click",async()=>{
+    const user=state.users.find(item=>item.id===btn.dataset.toggleUser);
+    if(!user) return;
+
+    const nextActive=btn.dataset.nextActive==="true";
+    if(!nextActive) {
+      const confirmed=confirm(
+        "¿Quitar el acceso de "+user.name+"?\n\n"+
+        "No se borra su historial, contactos ni actividad. El usuario no podrá volver a entrar con Google hasta que lo reactives."
+      );
+      if(!confirmed) return;
+    }
+
+    try {
+      await api("/users/"+user.id,{ method:"PATCH",body:{ active:nextActive } });
+      setMessage("#team-message",nextActive?"Acceso reactivado.":"Acceso retirado.",true);
+      await loadUsers();
+    } catch(error) {
+      setMessage("#team-message",error.message);
+    }
+  }));
 }
 
 async function createUser(event) {
