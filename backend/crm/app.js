@@ -191,8 +191,17 @@ function enterApp(user) {
   $("#user-role").textContent=user.role === "admin" ? "Administrador" : user.role === "viewer" ? "Solo lectura" : "Miembro";
   $("#user-avatar").textContent=initials(user.name);
   $("#team-create-panel").hidden=user.role !== "admin";
+  applyPermissions();
   loadUsers();
   showView("dashboard");
+}
+
+function applyPermissions() {
+  const readOnly=state.user?.role==="viewer";
+  ["#new-contact-btn","#quick-task-btn","#new-content-btn"].forEach(selector=>{
+    const el=$(selector);
+    if(el) el.hidden=readOnly;
+  });
 }
 
 const viewMeta = {
