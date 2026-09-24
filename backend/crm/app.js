@@ -565,7 +565,7 @@ function renderLinkedIn() {
   $("#linkedin-prospects").innerHTML=prospects.length ? prospects.map(c=>
     '<div class="stack-item">'+
       '<span class="stack-icon">'+initials(c.name)+'</span>'+
-      '<div class="stack-main"><strong>'+esc(c.name)+'</strong><small>'+esc([c.title,c.company,c.signal].filter(Boolean).join(" · "))+'</small></div>'+
+      '<div class="stack-main"><strong>'+esc(c.name)+(c.target_score!=null?' · Score '+esc(c.target_score):'')+'</strong><small>'+esc([c.title,c.company,c.signal].filter(Boolean).join(" · "))+'</small></div>'+
       '<button class="stack-action" data-new-task-contact="'+c.id+'">+ Acción</button>'+
     '</div>'
   ).join("") : empty("Todos los prospectos tienen una próxima acción.");
