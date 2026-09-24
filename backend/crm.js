@@ -390,6 +390,13 @@ export function createCrmRouter({ pool }) {
     next();
   }
 
+  function writeAccess(req, res, next) {
+    if (!["admin","member"].includes(req.crmUser?.role)) {
+      return res.status(403).json({ ok:false, error:"Tu acceso es de solo lectura." });
+    }
+    next();
+  }
+
   router.get("/bootstrap-status", async (_req, res) => {
     try {
       if (!pool) return res.status(503).json({ ok:false });
@@ -591,7 +598,7 @@ export function createCrmRouter({ pool }) {
     res.json({ ok:true, contacts:result.rows });
   });
 
-  router.post("/contacts", auth, async (req, res) => {
+  router.post("/contacts", auth, writeAccess, async (req, res) => {
     const body = req.body || {};
     const name = cleanText(body.name, 160);
     if (name.length < 2) {
@@ -695,7 +702,7 @@ export function createCrmRouter({ pool }) {
     }
   });
 
-  router.patch("/contacts/:id", auth, async (req, res) => {
+  router.patch("/contacts/:id", auth, writeAccess, async (req, res) => {
     const allowed = {
       name:"name",
       email:"email",
@@ -774,7 +781,7 @@ export function createCrmRouter({ pool }) {
     }
   });
 
-  router.post("/contacts/:id/archive", auth, async (req, res) => {
+  router.post("/contacts/:id/archive", auth, writeAccess, async (req, res) => {
     const result = await pool.query(
       "UPDATE crm_contacts SET archived=TRUE,updated_at=NOW() WHERE id=$1 RETURNING id",
       [req.params.id]
@@ -786,7 +793,7 @@ export function createCrmRouter({ pool }) {
     res.json({ ok:true });
   });
 
-  router.post("/contacts/:id/activities", auth, async (req, res) => {
+  router.post("/contacts/:id/activities", auth, writeAccess, async (req, res) => {
     const type = ACTIVITY_TYPES.has(req.body?.type) ? req.body.type : "note";
     const direction = ["inbound","outbound","internal"].includes(req.body?.direction)
       ? req.body.direction
@@ -846,7 +853,7 @@ export function createCrmRouter({ pool }) {
     res.json({ ok:true, tasks:result.rows });
   });
 
-  router.post("/tasks", auth, async (req, res) => {
+  router.post("/tasks", auth, writeAccess, async (req, res) => {
     const type = TASK_TYPES.has(req.body?.type) ? req.body.type : "custom";
     const title = cleanText(req.body?.title, 240);
     const dueAt = req.body?.dueAt;
@@ -890,7 +897,7 @@ export function createCrmRouter({ pool }) {
     }
   });
 
-  router.patch("/tasks/:id", auth, async (req, res) => {
+  router.patch("/tasks/:id", auth, writeAccess, async (req, res) => {
     const status = ["open","done","cancelled"].includes(req.body?.status)
       ? req.body.status
       : null;
@@ -960,7 +967,7 @@ export function createCrmRouter({ pool }) {
     res.json({ ok:true, content:result.rows });
   });
 
-  router.post("/content", auth, async (req, res) => {
+  router.post("/content", auth, writeAccess, async (req, res) => {
     const title = cleanText(req.body?.title, 240);
     const profile = cleanText(req.body?.profile, 100);
     if (!title || !profile) {
@@ -999,7 +1006,7 @@ export function createCrmRouter({ pool }) {
     }
   });
 
-  router.patch("/content/:id", auth, async (req, res) => {
+  router.patch("/content/:id", auth, writeAccess, async (req, res) => {
     const allowed = {
       platform:"platform",
       profile:"profile",
