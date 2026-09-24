@@ -417,18 +417,48 @@ app.patch("/internal/users/:id",requireInternal,async(req,res)=>{
   }
 
   if(!sets.length) return res.json({ ok:true });
-  params.push(req.params.id);
+
   try{
+    const current=await pool.query(
+      "SELECT id,role,active FROM crm_users WHERE id=$1 LIMIT 1",
+      [req.params.id]
+    );
+    if(!current.rowCount) {
+      return res.status(404).json({ ok:false,error:"Usuario no encontrado." });
+    }
+
+    const user=current.rows[0];
+    const removingAdmin =
+      user.active === true &&
+      user.role === "admin" &&
+      (
+        (Object.prototype.hasOwnProperty.call(req.body||{},"active") && req.body.active === false) ||
+        (Object.prototype.hasOwnProperty.call(req.body||{},"role") && req.body.role !== "admin")
+      );
+
+    if(removingAdmin) {
+      const admins=await pool.query(
+        "SELECT COUNT(*)::int AS count FROM crm_users WHERE active=TRUE AND role='admin'"
+      );
+      if(Number(admins.rows[0].count) <= 1) {
+        return res.status(409).json({
+          ok:false,
+          error:"Debe quedar al menos un administrador activo."
+        });
+      }
+    }
+
+    params.push(req.params.id);
     const result=await pool.query(
-      "UPDATE crm_users SET "+sets.join(",")+",updated_at=NOW() WHERE id=$"+params.length+" RETURNING id",
+      "UPDATE crm_users SET "+sets.join(",")+",updated_at=NOW() WHERE id=$"+params.length+" RETURNING id,active,role",
       params
     );
-    if(!result.rowCount) return res.status(404).json({ ok:false,error:"Usuario no encontrado." });
-    res.json({ ok:true });
+    res.json({ ok:true,user:result.rows[0] });
   }catch(error){
     if(String(error.code)==="23505") {
       return res.status(409).json({ ok:false,error:"Ese email ya está en uso." });
     }
+    console.error("update_user_failed",error);
     res.status(500).json({ ok:false,error:"No pudimos actualizar el usuario." });
   }
 });

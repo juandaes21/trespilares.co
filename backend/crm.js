@@ -64,6 +64,7 @@ function publicUser(row) {
     role: row.role,
     teamMemberEmail: row.team_member_email || null,
     avatarUrl: row.avatar_url || null,
+    lastLoginAt: row.last_login_at || null,
     active: row.active !== false
   };
 }
@@ -378,6 +379,51 @@ export function createCrmRouter({ pool }) {
       res.status(error.status || 500).json({
         ok:false,
         error:error.message || "No pudimos crear el usuario."
+      });
+    }
+  });
+
+  router.patch("/users/:id", auth, admin, async (req, res) => {
+    const body = {};
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "active")) {
+      body.active = Boolean(req.body.active);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "role")) {
+      if (!["admin","member","viewer"].includes(req.body.role)) {
+        return res.status(400).json({ ok:false, error:"Rol inválido." });
+      }
+      body.role = req.body.role;
+    }
+
+    if (!Object.keys(body).length) {
+      return res.status(400).json({ ok:false, error:"No hay cambios para aplicar." });
+    }
+
+    if (req.params.id === req.crmUser.id && body.active === false) {
+      return res.status(400).json({
+        ok:false,
+        error:"No puedes quitar tu propio acceso mientras estás usando esa cuenta."
+      });
+    }
+
+    try {
+      const result = await authServiceRequest("/internal/users/" + encodeURIComponent(req.params.id), {
+        method:"PATCH",
+        body
+      });
+      await audit(
+        pool,
+        req.crmUser.id,
+        body.active === false ? "deactivate" : body.active === true ? "reactivate" : "update",
+        "user",
+        req.params.id,
+        body
+      );
+      res.json(result);
+    } catch (error) {
+      res.status(error.status || 500).json({
+        ok:false,
+        error:error.message || "No pudimos actualizar el acceso."
       });
     }
   });
