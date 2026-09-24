@@ -56,53 +56,6 @@ function normalizeEmail(value) {
   return cleanText(value, 200).toLowerCase();
 }
 
-function parseCookies(req) {
-  return Object.fromEntries(
-    String(req.headers.cookie || "")
-      .split(";")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .map((part) => {
-        const index = part.indexOf("=");
-        if (index < 0) return [part, ""];
-        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
-      })
-  );
-}
-
-function sessionHash(token) {
-  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
-}
-
-function safeTimingEqual(a, b) {
-  const aa = Buffer.from(String(a || ""));
-  const bb = Buffer.from(String(b || ""));
-  return aa.length === bb.length && crypto.timingSafeEqual(aa, bb);
-}
-
-function scryptKey(password, salt) {
-  return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, (error, key) => {
-      if (error) reject(error);
-      else resolve(key);
-    });
-  });
-}
-
-async function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const key = await scryptKey(password, salt);
-  return "scrypt$" + salt + "$" + key.toString("hex");
-}
-
-async function verifyPassword(password, stored) {
-  const [algo, salt, expectedHex] = String(stored || "").split("$");
-  if (algo !== "scrypt" || !salt || !expectedHex) return false;
-  const key = await scryptKey(password, salt);
-  const expected = Buffer.from(expectedHex, "hex");
-  return expected.length === key.length && crypto.timingSafeEqual(expected, key);
-}
-
 function publicUser(row) {
   return {
     id: row.id,
@@ -110,16 +63,9 @@ function publicUser(row) {
     email: row.email,
     role: row.role,
     teamMemberEmail: row.team_member_email || null,
+    avatarUrl: row.avatar_url || null,
     active: row.active !== false
   };
-}
-
-function setSessionCookie(res, token, maxAgeSeconds = 60 * 60 * 24 * 7) {
-  res.setHeader(
-    "Set-Cookie",
-    "tp_crm_session=" + encodeURIComponent(token) +
-      "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=" + maxAgeSeconds
-  );
 }
 
 async function audit(db, userId, action, entityType, entityId, metadata = {}) {
@@ -144,6 +90,13 @@ export async function ensureCrmSchema(pool) {
       active BOOLEAN NOT NULL DEFAULT TRUE
     );
 
+
+    ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS google_sub TEXT;
+    ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+    ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+    ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS team_member_email TEXT;
+    ALTER TABLE crm_users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
 
     CREATE TABLE IF NOT EXISTS crm_content_assets (
       id UUID PRIMARY KEY,
