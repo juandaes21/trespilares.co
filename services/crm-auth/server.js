@@ -241,7 +241,7 @@ app.get("/auth/google/callback",async(req,res)=>{
 
     if(!result.rowCount) {
       const total=await pool.query("SELECT COUNT(*)::int AS count FROM crm_users");
-      const bootstrapEmail=normalizeEmail(process.env.CRM_BOOTSTRAP_ADMIN_EMAIL || "");
+      const bootstrapEmail=normalizeEmail(process.env.CRM_BOOTSTRAP_ADMIN_EMAIL || "trespilares.co@gmail.com");
       if(Number(total.rows[0].count)===0 && bootstrapEmail && email===bootstrapEmail) {
         const id=crypto.randomUUID();
         await pool.query(
