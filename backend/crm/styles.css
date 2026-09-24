@@ -53,6 +53,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 
 .btn.primary:hover{background:var(--green-deep)}
 .btn.ghost{background:#fff;border-color:var(--line);color:var(--green)}
 .btn.ghost:hover{border-color:#b9b0a1}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;background:#fff;border-color:#d9d3c9;color:var(--ink);box-shadow:0 3px 12px rgba(11,46,38,.05)}
+.google-btn:hover{border-color:#b9b0a1;background:#fcfaf7}
+.google-g{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:900;font-family:Arial,sans-serif;color:#4285F4;border:1px solid #e2e2e2;background:#fff}
+.auth-hint{font-size:.74rem;margin:0;color:var(--muted);text-align:center}
 .form-message{font-size:.78rem;min-height:1.2em;margin:0;color:var(--danger)}
 .app-shell{min-height:100vh;display:grid;grid-template-columns:246px minmax(0,1fr)}
 .sidebar{background:var(--green-deep);color:#fff;padding:26px 18px 20px;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;z-index:20}
