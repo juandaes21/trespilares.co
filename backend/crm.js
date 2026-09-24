@@ -137,11 +137,22 @@ export async function ensureCrmSchema(pool) {
       signal TEXT,
       need_summary TEXT,
       notes TEXT,
+      target_score SMALLINT,
+      score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb,
+      score_reason TEXT,
+      score_version TEXT,
+      scored_at TIMESTAMPTZ,
       last_contact_at TIMESTAMPTZ,
       next_action_at TIMESTAMPTZ,
       archived BOOLEAN NOT NULL DEFAULT FALSE,
       created_by UUID REFERENCES crm_users(id)
     );
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS target_score SMALLINT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_reason TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_version TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS scored_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS crm_contacts_score_idx ON crm_contacts(target_score DESC) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_stage_idx ON crm_contacts(stage) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_owner_idx ON crm_contacts(owner_user_id) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_next_action_idx ON crm_contacts(next_action_at) WHERE archived = FALSE;
@@ -198,6 +209,167 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS utm_content TEXT;
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS referrer TEXT;
   `);
+}
+
+export async function importCrmTargetsFromEnv(pool) {
+  if (!pool) return { imported:0, updated:0, tasks:0 };
+  const raw = String(process.env.CRM_TARGET_IMPORT_JSON || "").trim();
+  if (!raw || raw === "[]") return { imported:0, updated:0, tasks:0 };
+
+  let targets;
+  try {
+    targets = JSON.parse(raw);
+  } catch (error) {
+    console.error("crm_target_import_invalid_json", error);
+    return { imported:0, updated:0, tasks:0 };
+  }
+  if (!Array.isArray(targets)) return { imported:0, updated:0, tasks:0 };
+  targets = targets.slice(0, 100);
+
+  let imported = 0;
+  let updated = 0;
+  let tasks = 0;
+
+  for (const target of targets) {
+    const name = cleanText(target?.name, 160);
+    const linkedinUrl = cleanText(target?.linkedinUrl, 500);
+    if (!name || !linkedinUrl) continue;
+
+    const ownerEmail = normalizeEmail(target?.ownerEmail || "");
+    let ownerId = null;
+    if (ownerEmail) {
+      const owner = await pool.query(
+        "SELECT id FROM crm_users WHERE LOWER(email)=LOWER($1) AND active=TRUE LIMIT 1",
+        [ownerEmail]
+      );
+      ownerId = owner.rows[0]?.id || null;
+    }
+
+    const score = Number.isFinite(Number(target?.targetScore))
+      ? Math.max(0, Math.min(100, Math.round(Number(target.targetScore))))
+      : null;
+    const breakdown = target?.scoreBreakdown && typeof target.scoreBreakdown === "object"
+      ? target.scoreBreakdown
+      : {};
+    const scoreReason = cleanNullable(target?.scoreReason, 2000);
+    const scoreVersion = cleanNullable(target?.scoreVersion || "TP-LI-v1", 80);
+
+    const existing = await pool.query(
+      "SELECT id FROM crm_contacts WHERE linkedin_url=$1 AND archived=FALSE LIMIT 1",
+      [linkedinUrl]
+    );
+
+    let contactId;
+    if (existing.rowCount) {
+      contactId = existing.rows[0].id;
+      await pool.query(
+        `UPDATE crm_contacts
+            SET company=COALESCE(NULLIF($2,''),company),
+                title=COALESCE(NULLIF($3,''),title),
+                segment=COALESCE(NULLIF($4,''),segment),
+                owner_user_id=COALESCE(owner_user_id,$5),
+                source_channel='linkedin',
+                source_profile=COALESCE(NULLIF($6,''),source_profile),
+                signal=COALESCE(NULLIF($7,''),signal),
+                notes=COALESCE(NULLIF($8,''),notes),
+                target_score=$9,
+                score_breakdown=$10::jsonb,
+                score_reason=$11,
+                score_version=$12,
+                scored_at=NOW(),
+                updated_at=NOW()
+          WHERE id=$1`,
+        [
+          contactId,
+          cleanText(target?.company,160),
+          cleanText(target?.title,160),
+          cleanText(target?.segment,100),
+          ownerId,
+          cleanText(target?.sourceProfile || "Juan David",100),
+          cleanText(target?.signal,500),
+          cleanText(target?.notes,4000),
+          score,
+          JSON.stringify(breakdown),
+          scoreReason,
+          scoreVersion
+        ]
+      );
+      updated += 1;
+    } else {
+      contactId = crypto.randomUUID();
+      await pool.query(
+        `INSERT INTO crm_contacts(
+          id,name,company,title,linkedin_url,segment,owner_user_id,source_channel,source_profile,
+          source_detail,stage,signal,notes,target_score,score_breakdown,score_reason,score_version,scored_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,'target',$10,$11,$12,$13::jsonb,$14,$15,NOW())`,
+        [
+          contactId,
+          name,
+          cleanNullable(target?.company,160),
+          cleanNullable(target?.title,160),
+          linkedinUrl,
+          cleanNullable(target?.segment,100),
+          ownerId,
+          cleanText(target?.sourceProfile || "Juan David",100),
+          cleanNullable(target?.sourceDetail || "prospecting-score",180),
+          cleanNullable(target?.signal,500),
+          cleanNullable(target?.notes,4000),
+          score,
+          JSON.stringify(breakdown),
+          scoreReason,
+          scoreVersion
+        ]
+      );
+      await pool.query(
+        `INSERT INTO crm_activities(id,contact_id,type,direction,summary,metadata)
+         VALUES ($1,$2,'note','internal',$3,$4::jsonb)`,
+        [
+          crypto.randomUUID(),
+          contactId,
+          "Target incorporado por scoring de prospección",
+          JSON.stringify({ targetScore:score, scoreVersion })
+        ]
+      );
+      imported += 1;
+    }
+
+    const task = target?.task;
+    if (task?.title && task?.type && TASK_TYPES.has(task.type)) {
+      const existsTask = await pool.query(
+        `SELECT id FROM crm_tasks
+          WHERE contact_id=$1 AND status='open' AND type=$2 AND title=$3
+          LIMIT 1`,
+        [contactId, task.type, cleanText(task.title,240)]
+      );
+      if (!existsTask.rowCount) {
+        const dueAt = task.dueAt || new Date(Date.now() + 24*60*60*1000).toISOString();
+        await pool.query(
+          `INSERT INTO crm_tasks(id,contact_id,type,title,notes,due_at,priority,assigned_user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            crypto.randomUUID(),
+            contactId,
+            task.type,
+            cleanText(task.title,240),
+            cleanNullable(task.notes,1500),
+            dueAt,
+            ["low","normal","high"].includes(task.priority) ? task.priority : "normal",
+            ownerId
+          ]
+        );
+        await pool.query(
+          `UPDATE crm_contacts
+              SET next_action_at=CASE WHEN next_action_at IS NULL OR next_action_at>$2 THEN $2 ELSE next_action_at END
+            WHERE id=$1`,
+          [contactId,dueAt]
+        );
+        tasks += 1;
+      }
+    }
+  }
+
+  console.log("crm_target_import_complete", { imported, updated, tasks });
+  return { imported, updated, tasks };
 }
 
 export async function syncAppointmentToCrm(client, data) {
@@ -524,8 +696,8 @@ export function createCrmRouter({ pool }) {
         `INSERT INTO crm_contacts(
           id,name,email,phone,company,title,linkedin_url,segment,owner_user_id,source_channel,
           source_profile,source_detail,source_content_id,stage,interest_pillar,signal,need_summary,
-          notes,next_action_at,created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+          notes,target_score,score_breakdown,score_reason,score_version,scored_at,next_action_at,created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24,$25,$26)`,
         [
           id,
           name,
@@ -545,6 +717,11 @@ export function createCrmRouter({ pool }) {
           cleanNullable(body.signal,500),
           cleanNullable(body.needSummary,1500),
           cleanNullable(body.notes,4000),
+          Number.isFinite(Number(body.targetScore)) ? Math.max(0,Math.min(100,Math.round(Number(body.targetScore)))) : null,
+          JSON.stringify(body.scoreBreakdown && typeof body.scoreBreakdown === "object" ? body.scoreBreakdown : {}),
+          cleanNullable(body.scoreReason,2000),
+          cleanNullable(body.scoreVersion,80),
+          body.targetScore != null ? new Date().toISOString() : null,
           body.nextActionAt || null,
           req.crmUser.id
         ]
@@ -633,6 +810,8 @@ export function createCrmRouter({ pool }) {
       signal:"signal",
       needSummary:"need_summary",
       notes:"notes",
+      scoreReason:"score_reason",
+      scoreVersion:"score_version",
       nextActionAt:"next_action_at"
     };
     const sets = [];
@@ -646,6 +825,17 @@ export function createCrmRouter({ pool }) {
         params.push(value);
         sets.push(column + "=$" + params.length);
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "targetScore")) {
+      const score = Number(req.body.targetScore);
+      params.push(Number.isFinite(score) ? Math.max(0,Math.min(100,Math.round(score))) : null);
+      sets.push("target_score=$" + params.length);
+      sets.push("scored_at=NOW()");
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "scoreBreakdown")) {
+      params.push(JSON.stringify(req.body.scoreBreakdown && typeof req.body.scoreBreakdown === "object" ? req.body.scoreBreakdown : {}));
+      sets.push("score_breakdown=$" + params.length + "::jsonb");
     }
 
     let stageChanged = false;
