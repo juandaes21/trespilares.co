@@ -1,5 +1,6 @@
 import express from "express";
 import crypto from "node:crypto";
+import { crmAuth, crmAdmin, crmWriteAccess, authServiceRequest, authServiceUrl, setCrmAccessCookie, clearCrmAccessCookie } from "./auth-client.js";
 
 export const CRM_STAGES = [
   "target",
@@ -137,19 +138,12 @@ export async function ensureCrmSchema(pool) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
+      password_hash TEXT,
       role TEXT NOT NULL DEFAULT 'member',
       team_member_email TEXT,
       active BOOLEAN NOT NULL DEFAULT TRUE
     );
 
-    CREATE TABLE IF NOT EXISTS crm_sessions (
-      token_hash TEXT PRIMARY KEY,
-      user_id UUID NOT NULL REFERENCES crm_users(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      expires_at TIMESTAMPTZ NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS crm_sessions_expiry_idx ON crm_sessions(expires_at);
 
     CREATE TABLE IF NOT EXISTS crm_content_assets (
       id UUID PRIMARY KEY,
@@ -358,120 +352,45 @@ export async function syncAppointmentToCrm(client, data) {
 export function createCrmRouter({ pool }) {
   const router = express.Router();
 
-  async function auth(req, res, next) {
-    if (!pool) return res.status(503).json({ ok:false, error:"CRM no disponible." });
-    const token = parseCookies(req).tp_crm_session;
-    if (!token) return res.status(401).json({ ok:false, error:"Sesión requerida." });
+  const auth = crmAuth(pool);
+  const admin = crmAdmin;
+  const writeAccess = crmWriteAccess;
+
+  router.get("/auth/google", (_req, res) => {
     try {
-      const result = await pool.query(
-        `SELECT u.*
-           FROM crm_sessions s
-           JOIN crm_users u ON u.id = s.user_id
-          WHERE s.token_hash = $1
-            AND s.expires_at > NOW()
-            AND u.active = TRUE
-          LIMIT 1`,
-        [sessionHash(token)]
-      );
-      if (!result.rowCount) return res.status(401).json({ ok:false, error:"Sesión vencida." });
-      req.crmUser = result.rows[0];
-      req.crmSessionToken = token;
-      next();
-    } catch (error) {
-      console.error("crm_auth_failed", error);
-      res.status(500).json({ ok:false, error:"No pudimos validar la sesión." });
-    }
-  }
-
-  function admin(req, res, next) {
-    if (req.crmUser?.role !== "admin") {
-      return res.status(403).json({ ok:false, error:"Permiso de administrador requerido." });
-    }
-    next();
-  }
-
-  function writeAccess(req, res, next) {
-    if (!["admin","member"].includes(req.crmUser?.role)) {
-      return res.status(403).json({ ok:false, error:"Tu acceso es de solo lectura." });
-    }
-    next();
-  }
-
-  router.get("/bootstrap-status", async (_req, res) => {
-    try {
-      if (!pool) return res.status(503).json({ ok:false });
-      const result = await pool.query("SELECT COUNT(*)::int AS count FROM crm_users");
-      res.json({ ok:true, needsBootstrap:Number(result.rows[0].count) === 0 });
+      res.redirect(authServiceUrl("/auth/google"));
     } catch {
-      res.status(500).json({ ok:false });
+      res.status(503).send("El servicio de autenticación no está configurado.");
     }
   });
 
-  router.post("/bootstrap", async (req, res) => {
-    if (!pool) return res.status(503).json({ ok:false, error:"CRM no disponible." });
-    const configured = String(process.env.CRM_BOOTSTRAP_TOKEN || "");
-    const supplied = String(req.headers["x-bootstrap-token"] || "");
-    if (!configured || !safeTimingEqual(configured, supplied)) {
-      return res.status(403).json({ ok:false, error:"Token de activación inválido." });
-    }
+  router.get("/auth/complete", async (req, res) => {
+    const code = cleanText(req.query.code, 500);
+    const authError = cleanText(req.query.auth, 80);
+    if (authError) return res.redirect("/crm/?auth=" + encodeURIComponent(authError));
+    if (!code) return res.redirect("/crm/?auth=missing_code");
+
     try {
-      const count = await pool.query("SELECT COUNT(*)::int AS count FROM crm_users");
-      if (Number(count.rows[0].count) > 0) {
-        return res.status(409).json({ ok:false, error:"El CRM ya fue inicializado." });
-      }
-      const name = cleanText(req.body?.name, 120);
-      const email = normalizeEmail(req.body?.email);
-      const password = String(req.body?.password || "");
-      if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 10) {
-        return res.status(400).json({
-          ok:false,
-          error:"Nombre, email y contraseña de al menos 10 caracteres son obligatorios."
-        });
-      }
-      const id = crypto.randomUUID();
-      await pool.query(
-        `INSERT INTO crm_users(id,name,email,password_hash,role,team_member_email)
-         VALUES ($1,$2,$3,$4,'admin',$3)`,
-        [id,name,email,await hashPassword(password)]
-      );
-      res.status(201).json({ ok:true });
+      const result = await authServiceRequest("/internal/exchange", {
+        method:"POST",
+        body:{ code }
+      });
+      setCrmAccessCookie(res, result.accessToken, Number(result.expiresIn || 43200));
+      res.redirect("/crm/");
     } catch (error) {
-      console.error("crm_bootstrap_failed", error);
-      res.status(500).json({ ok:false, error:"No pudimos inicializar el CRM." });
+      console.error("crm_auth_exchange_failed", error);
+      res.redirect("/crm/?auth=failed");
     }
   });
 
-  router.post("/auth/login", async (req, res) => {
-    const email = normalizeEmail(req.body?.email);
-    const password = String(req.body?.password || "");
-    try {
-      const result = await pool.query(
-        "SELECT * FROM crm_users WHERE email=$1 AND active=TRUE LIMIT 1",
-        [email]
-      );
-      const user = result.rows[0];
-      if (!user || !(await verifyPassword(password, user.password_hash))) {
-        return res.status(401).json({ ok:false, error:"Credenciales inválidas." });
-      }
-      const token = crypto.randomBytes(32).toString("base64url");
-      await pool.query(
-        "INSERT INTO crm_sessions(token_hash,user_id,expires_at) VALUES ($1,$2,NOW()+INTERVAL '7 days')",
-        [sessionHash(token), user.id]
-      );
-      setSessionCookie(res, token);
-      res.json({ ok:true, user:publicUser(user) });
-    } catch (error) {
-      console.error("crm_login_failed", error);
-      res.status(500).json({ ok:false, error:"No pudimos iniciar sesión." });
-    }
-  });
-
-  router.post("/auth/logout", auth, async (req, res) => {
-    try {
-      await pool.query("DELETE FROM crm_sessions WHERE token_hash=$1", [sessionHash(req.crmSessionToken)]);
-    } catch {}
-    setSessionCookie(res, "", 0);
+  router.post("/auth/logout", (_req, res) => {
+    clearCrmAccessCookie(res);
     res.json({ ok:true });
+  });
+
+  router.get("/auth/logout", (_req, res) => {
+    clearCrmAccessCookie(res);
+    res.redirect("/crm/");
   });
 
   router.get("/me", auth, (req, res) => {
@@ -480,7 +399,7 @@ export function createCrmRouter({ pool }) {
 
   router.get("/users", auth, async (_req, res) => {
     const result = await pool.query(
-      "SELECT id,name,email,role,team_member_email,active FROM crm_users ORDER BY active DESC,name"
+      "SELECT id,name,email,role,team_member_email,avatar_url,active,last_login_at FROM crm_users ORDER BY active DESC,name"
     );
     res.json({ ok:true, users:result.rows.map(publicUser) });
   });
@@ -488,30 +407,25 @@ export function createCrmRouter({ pool }) {
   router.post("/users", auth, admin, async (req, res) => {
     const name = cleanText(req.body?.name, 120);
     const email = normalizeEmail(req.body?.email);
-    const password = String(req.body?.password || "");
     const role = ["admin","member","viewer"].includes(req.body?.role) ? req.body.role : "member";
     const teamMemberEmail = normalizeEmail(req.body?.teamMemberEmail || email);
-    if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 10) {
-      return res.status(400).json({
-        ok:false,
-        error:"Completa nombre, email y una contraseña de al menos 10 caracteres."
-      });
+
+    if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ ok:false, error:"Completa nombre y email." });
     }
+
     try {
-      const id = crypto.randomUUID();
-      await pool.query(
-        `INSERT INTO crm_users(id,name,email,password_hash,role,team_member_email)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [id,name,email,await hashPassword(password),role,teamMemberEmail]
-      );
-      await audit(pool, req.crmUser.id, "create", "user", id, { email, role });
-      res.status(201).json({ ok:true, id });
+      const result = await authServiceRequest("/internal/users", {
+        method:"POST",
+        body:{ name,email,role,teamMemberEmail }
+      });
+      await audit(pool, req.crmUser.id, "create", "user", result.id, { email,role });
+      res.status(201).json(result);
     } catch (error) {
-      if (String(error.code) === "23505") {
-        return res.status(409).json({ ok:false, error:"Ya existe un usuario con ese email." });
-      }
-      console.error("crm_user_create_failed", error);
-      res.status(500).json({ ok:false, error:"No pudimos crear el usuario." });
+      res.status(error.status || 500).json({
+        ok:false,
+        error:error.message || "No pudimos crear el usuario."
+      });
     }
   });
 
