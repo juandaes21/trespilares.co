@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Tres Pilares CRM</title>
+  <link rel="stylesheet" href="/crm/styles.css">
+</head>
+<body>
+  <div id="auth-shell" class="auth-shell">
+    <section class="auth-brand">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div>
+          <strong>TRES PILARES</strong>
+          <small>CRM · Planificación Patrimonial</small>
+        </div>
+      </div>
+      <div class="auth-copy">
+        <span class="eyebrow">OPERACIÓN COMERCIAL</span>
+        <h1>Convierte relaciones en conversaciones de valor.</h1>
+        <p>Un solo lugar para LinkedIn, leads, reuniones, seguimiento y atribución comercial.</p>
+      </div>
+      <p class="auth-foot">Protege · Construye · Proyecta</p>
+    </section>
+
+    <section class="auth-panel">
+      <div id="login-card" class="auth-card">
+        <div>
+          <span class="eyebrow">ACCESO PRIVADO</span>
+          <h2>Entrar al CRM</h2>
+          <p>El acceso está restringido al equipo autorizado de Tres Pilares.</p>
+        </div>
+        <a class="btn google-btn" href="/api/crm/auth/google">
+          <span class="google-g">G</span>
+          Continuar con Google
+        </a>
+        <p class="auth-hint">Usa el correo que haya sido habilitado por un administrador.</p>
+        <p id="login-message" class="form-message" aria-live="polite"></p>
+      </div>
+    </section>
+  </div>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="brand-lockup sidebar-brand">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div><strong>TRES PILARES</strong><small>CRM</small></div>
+      </div>
+
+      <nav class="nav-menu" aria-label="CRM">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span>Inicio</button>
+        <button class="nav-item" data-view="pipeline"><span>▥</span>Pipeline</button>
+        <button class="nav-item" data-view="linkedin"><span>in</span>LinkedIn</button>
+        <button class="nav-item" data-view="contacts"><span>◉</span>Contactos</button>
+        <button class="nav-item" data-view="tasks"><span>✓</span>Tareas</button>
+        <button class="nav-item" data-view="content"><span>◇</span>Contenido</button>
+        <button class="nav-item" data-view="team"><span>♙</span>Equipo</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="user-chip">
+          <span id="user-avatar">TP</span>
+          <div><strong id="user-name">Equipo</strong><small id="user-role">Miembro</small></div>
+        </div>
+        <button id="logout-btn" class="link-btn">Cerrar sesión</button>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <span id="view-kicker" class="eyebrow">OPERACIÓN COMERCIAL</span>
+          <h1 id="view-title">Inicio</h1>
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost" id="quick-task-btn">+ Tarea</button>
+          <button class="btn primary" id="new-contact-btn">+ Contacto</button>
+        </div>
+      </header>
+
+      <section id="view-dashboard" class="view active-view">
+        <div id="dashboard-cards" class="metric-grid"></div>
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">FUNNEL</span><h2>Pipeline comercial</h2></div></div>
+            <div id="dashboard-funnel" class="funnel-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">HOY</span><h2>Próximas acciones</h2></div><button class="text-action" data-go="tasks">Ver todas</button></div>
+            <div id="dashboard-tasks" class="stack-list"></div>
+          </article>
+        </div>
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">ORIGEN</span><h2>Leads por canal</h2></div></div>
+            <div id="dashboard-sources" class="bar-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">ATRIBUCIÓN</span><h2>Contenido que genera conversación</h2></div><button class="text-action" data-go="content">Contenido</button></div>
+            <div id="dashboard-content" class="stack-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-pipeline" class="view">
+        <div class="toolbar">
+          <div class="toolbar-copy"><p>Mueve cada relación según avance. El objetivo no es llenar el CRM: es saber cuál es el siguiente paso.</p></div>
+          <button class="btn ghost" id="pipeline-refresh">Actualizar</button>
+        </div>
+        <div id="pipeline-board" class="kanban"></div>
+      </section>
+
+      <section id="view-linkedin" class="view">
+        <div class="linkedin-hero">
+          <div>
+            <span class="eyebrow">LINKEDIN MEETING ENGINE</span>
+            <h2>Tu lista de acciones de hoy.</h2>
+            <p>Comenta, conecta, conversa y haz seguimiento sin convertir LinkedIn en spam.</p>
+          </div>
+          <div class="linkedin-rule">Signal → Interaction → Connection → Conversation → Meeting</div>
+        </div>
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">ACCIONES</span><h2>Hoy en LinkedIn</h2></div></div>
+            <div id="linkedin-tasks" class="stack-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">PROSPECTOS</span><h2>Sin próxima acción</h2></div></div>
+            <div id="linkedin-prospects" class="stack-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-contacts" class="view">
+        <div class="toolbar filters">
+          <input id="contact-search" class="search-input" placeholder="Buscar por nombre, empresa, cargo…">
+          <select id="contact-stage-filter"><option value="">Todas las etapas</option></select>
+          <select id="contact-source-filter">
+            <option value="">Todos los orígenes</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="trespilares.co">Web</option>
+            <option value="instagram">Instagram</option>
+            <option value="referido">Referido</option>
+            <option value="evento">Evento</option>
+            <option value="manual">Manual</option>
+          </select>
+        </div>
+        <article class="panel table-panel">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Contacto</th><th>Etapa</th><th>Origen</th><th>Owner</th><th>Próxima acción</th></tr></thead>
+              <tbody id="contacts-table"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section id="view-tasks" class="view">
+        <div class="segmented">
+          <button class="active" data-task-scope="open">Abiertas</button>
+          <button data-task-scope="today">Hoy</button>
+          <button data-task-scope="overdue">Vencidas</button>
+          <button data-task-scope="all">Todas</button>
+        </div>
+        <article class="panel">
+          <div id="tasks-list" class="task-list"></div>
+        </article>
+      </section>
+
+      <section id="view-content" class="view">
+        <div class="toolbar">
+          <div class="toolbar-copy">
+            <p>Registra las piezas que publicamos y mide cuáles producen contactos y reuniones.</p>
+          </div>
+          <button class="btn primary" id="new-content-btn">+ Registrar contenido</button>
+        </div>
+        <div id="content-grid" class="content-grid"></div>
+      </section>
+
+      <section id="view-team" class="view">
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">USUARIOS</span><h2>Equipo Tres Pilares</h2></div></div>
+            <div id="team-list" class="stack-list"></div>
+          </article>
+          <article class="panel" id="team-create-panel">
+            <div class="panel-head"><div><span class="eyebrow">ADMINISTRACIÓN</span><h2>Crear acceso</h2></div></div>
+            <form id="team-form" class="form-grid">
+              <label>Nombre<input name="name" required></label>
+              <label>Email<input name="email" type="email" required></label>
+              <label>Rol<select name="role"><option value="member">Miembro</option><option value="admin">Administrador</option><option value="viewer">Solo lectura</option></select></label>
+              <button class="btn primary" type="submit">Crear usuario</button>
+              <p id="team-message" class="form-message"></p>
+            </form>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="contact-dialog" class="modal">
+    <form method="dialog" class="modal-card" id="contact-form">
+      <div class="modal-head">
+        <div><span class="eyebrow">NUEVO CONTACTO</span><h2>Crear relación</h2></div>
+        <button class="icon-btn" value="cancel" aria-label="Cerrar">×</button>
+      </div>
+      <div class="form-grid two">
+        <label>Nombre<input name="name" required></label>
+        <label>Empresa<input name="company"></label>
+        <label>Cargo<input name="title"></label>
+        <label>LinkedIn<input name="linkedinUrl" type="url" placeholder="https://linkedin.com/in/..."></label>
+        <label>Email<input name="email" type="email"></label>
+        <label>WhatsApp<input name="phone"></label>
+        <label>Segmento<select name="segment"><option value="">Seleccionar</option><option>Profesional en crecimiento</option><option>Empresario / independiente</option><option>Familia</option><option>Patrimonio en transición</option></select></label>
+        <label>Origen<select name="sourceChannel"><option value="linkedin">LinkedIn</option><option value="referido">Referido</option><option value="trespilares.co">Web</option><option value="instagram">Instagram</option><option value="evento">Evento</option><option value="manual">Manual</option></select></label>
+        <label>Perfil de origen<select name="sourceProfile"><option value="">—</option><option>Juan David</option><option>Carolina</option><option>Giovanna</option><option>Tres Pilares</option></select></label>
+        <label>Etapa<select name="stage" id="new-contact-stage"></select></label>
+        <label class="span-2">Señal / contexto<textarea name="signal" rows="2" placeholder="Ascenso, nuevo negocio, comentario, interacción…"></textarea></label>
+        <label class="span-2">Notas<textarea name="notes" rows="3"></textarea></label>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn primary" type="submit" value="default">Crear contacto</button></div>
+      <p id="contact-message" class="form-message"></p>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog" class="modal wide-modal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div><span class="eyebrow">CONTACTO 360°</span><h2 id="detail-name">Contacto</h2></div>
+        <button class="icon-btn" data-close-detail aria-label="Cerrar">×</button>
+      </div>
+      <div id="detail-body"></div>
+    </div>
+  </dialog>
+
+  <dialog id="task-dialog" class="modal">
+    <form method="dialog" class="modal-card" id="task-form">
+      <div class="modal-head">
+        <div><span class="eyebrow">PRÓXIMA ACCIÓN</span><h2>Nueva tarea</h2></div>
+        <button class="icon-btn" value="cancel" aria-label="Cerrar">×</button>
+      </div>
+      <div class="form-grid">
+        <label>Contacto<select name="contactId" id="task-contact"></select></label>
+        <label>Tipo<select name="type"><option value="linkedin_comment">Comentar en LinkedIn</option><option value="linkedin_connect">Enviar conexión</option><option value="linkedin_dm">Enviar DM</option><option value="linkedin_followup">Follow-up LinkedIn</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="call">Llamada</option><option value="meeting">Reunión</option><option value="custom">Otro</option></select></label>
+        <label>Título<input name="title" required placeholder="Ej. Enviar conexión contextual"></label>
+        <label>Cuándo<input name="dueAt" type="datetime-local" required></label>
+        <label>Prioridad<select name="priority"><option value="normal">Normal</option><option value="high">Alta</option><option value="low">Baja</option></select></label>
+        <label>Notas<textarea name="notes" rows="3"></textarea></label>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn primary" type="submit" value="default">Crear tarea</button></div>
+      <p id="task-message" class="form-message"></p>
+    </form>
+  </dialog>
+
+  <dialog id="content-dialog" class="modal">
+    <form method="dialog" class="modal-card" id="content-form">
+      <div class="modal-head">
+        <div><span class="eyebrow">ATRIBUCIÓN</span><h2>Registrar contenido</h2></div>
+        <button class="icon-btn" value="cancel" aria-label="Cerrar">×</button>
+      </div>
+      <div class="form-grid">
+        <label>Perfil<select name="profile" required><option>Juan David</option><option>Carolina</option><option>Giovanna</option><option>Tres Pilares</option></select></label>
+        <label>Título<input name="title" required></label>
+        <label>URL<input name="url" type="url"></label>
+        <label>Pilar<select name="pillar"><option value="">—</option><option>Protege</option><option>Construye</option><option>Proyecta</option><option>Decisiones reales</option><option>Criterio financiero</option><option>Plan a Tres</option></select></label>
+        <label>Tema<input name="topic"></label>
+        <label>CTA<input name="cta" placeholder="Comenta PLAN / agenda / guardar…"></label>
+        <label>Estado<select name="status"><option value="draft">Borrador</option><option value="published">Publicado</option></select></label>
+        <label>Fecha publicación<input name="publishedAt" type="datetime-local"></label>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn primary" type="submit" value="default">Registrar</button></div>
+      <p id="content-message" class="form-message"></p>
+    </form>
+  </dialog>
+
+  <script src="/crm/app.js" defer></script>
+</body>
+</html>
