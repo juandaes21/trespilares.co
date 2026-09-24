@@ -1045,7 +1045,7 @@ export function createCrmRouter({ pool }) {
                    AND t.status='open'
                    AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
               )
-            ORDER BY COALESCE(c.next_action_at,c.updated_at) ASC
+            ORDER BY c.target_score DESC NULLS LAST, COALESCE(c.next_action_at,c.updated_at) ASC
             LIMIT 15`
       );
       res.json({ ok:true, tasks:tasks.rows, prospects:prospects.rows });
