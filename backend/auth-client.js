@@ -117,3 +117,19 @@ export function authServiceUrl(path = "") {
   if (!base) throw new Error("CRM_AUTH_SERVICE_URL is not configured");
   return base + path;
 }
+
+
+export function setCrmAccessCookie(res, token, maxAgeSeconds = 43200) {
+  res.setHeader(
+    "Set-Cookie",
+    COOKIE_NAME + "=" + encodeURIComponent(token) +
+      "; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=" + maxAgeSeconds
+  );
+}
+
+export function clearCrmAccessCookie(res) {
+  res.setHeader(
+    "Set-Cookie",
+    COOKIE_NAME + "=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"
+  );
+}
