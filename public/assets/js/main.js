@@ -235,13 +235,19 @@ if (leadForm) {
     }
 
     const form = new FormData(leadForm);
+    const params = new URLSearchParams(window.location.search);
     const payload = {
       name: String(form.get('name') || '').trim(),
       email: String(form.get('email') || '').trim(),
       phone: String(form.get('phone') || '').trim(),
       topic: String(form.get('topic') || '').trim(),
       startTime: selectedSlot,
-      source: 'trespilares.co'
+      source: 'trespilares.co',
+      utmSource: params.get('utm_source') || '',
+      utmMedium: params.get('utm_medium') || '',
+      utmCampaign: params.get('utm_campaign') || '',
+      utmContent: params.get('utm_content') || '',
+      referrer: document.referrer || ''
     };
 
     leadSubmit.disabled = true;
