@@ -5,7 +5,7 @@ import pg from "pg";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createCrmRouter, ensureCrmSchema, syncAppointmentToCrm } from "./crm.js";
+import { createCrmRouter, ensureCrmSchema, syncAppointmentToCrm, importCrmTargetsFromEnv } from "./crm.js";
 import { google } from "googleapis";
 import { DateTime, Interval } from "luxon";
 
@@ -702,6 +702,7 @@ app.use((_req, res) => res.status(404).json({ ok:false, error:"Not found" }));
 
 ensureSchema()
   .then(() => ensureCrmSchema(pool))
+  .then(() => importCrmTargetsFromEnv(pool))
   .then(() => app.listen(PORT, "0.0.0.0", () => console.log(`Tres Pilares API listening on port ${PORT}`)))
   .catch((error) => {
     console.error("schema_init_failed", error);
