@@ -72,3 +72,27 @@ CRM_AUTH_JWT_SECRET=
 - `appointment_requests.crm_contact_id`: vínculo agenda ↔ CRM.
 
 La información patrimonial sensible no debe almacenarse en `crm_contacts`; el CRM comercial conserva contexto mínimo, etapa, interés y próximos pasos.
+
+
+### Scoring de prospectos LinkedIn
+
+El CRM usa un **Target Score de 0 a 100** para priorizar a quién trabajar primero. No intenta inferir patrimonio, salud, vida familiar ni capacidad de compra; usa únicamente señales profesionales públicas y contexto de interacción.
+
+Versión inicial: `TP-LI-v1`.
+
+- **ICP fit — 0–30:** cercanía del rol/perfil con los segmentos definidos por Tres Pilares.
+- **Señal reciente — 0–25:** cambio, crecimiento, nueva responsabilidad, hito empresarial o actividad que crea un punto de entrada.
+- **Relevancia de conversación — 0–20:** posibilidad de abrir una conversación auténtica sobre estructura, decisiones financieras, empresa u objetivos sin forzar un pitch.
+- **Actividad en LinkedIn — 0–15:** publicaciones/interacciones recientes que permiten entrar con contexto.
+- **Accesibilidad — 0–10:** claridad del perfil, contexto compartido, red profesional o facilidad de personalizar la aproximación.
+
+Interpretación operativa:
+
+- **85–100:** prioridad A; trabajar esta semana.
+- **70–84:** prioridad B; trabajar si existe una señal o pieza de contenido pertinente.
+- **55–69:** prioridad C; mantener en radar.
+- **<55:** no priorizar por ahora.
+
+Cada target debe tener `score_reason`, desglose y fecha de scoring para que el criterio sea auditable y pueda recalibrarse con datos reales de aceptación, conversación y reuniones.
+
+Para imports puntuales desde investigación externa se puede usar temporalmente `CRM_TARGET_IMPORT_JSON`. El backend procesa el JSON de forma idempotente por `linkedin_url`; después de importar, la variable debe volver a `[]`.
