@@ -236,6 +236,7 @@ export async function importCrmTargetsFromEnv(pool) {
     if (!name || !linkedinUrl) continue;
 
     const ownerEmail = normalizeEmail(target?.ownerEmail || "");
+    const ownerName = cleanText(target?.ownerName || "", 160);
     let ownerId = null;
     if (ownerEmail) {
       const owner = await pool.query(
@@ -244,6 +245,15 @@ export async function importCrmTargetsFromEnv(pool) {
       );
       ownerId = owner.rows[0]?.id || null;
     }
+    if (!ownerId && ownerName) {
+      const owner = await pool.query(
+        "SELECT id FROM crm_users WHERE active=TRUE AND name ILIKE $1 ORDER BY updated_at DESC LIMIT 1",
+        ["%" + ownerName + "%"]
+      );
+      ownerId = owner.rows[0]?.id || null;
+    }
+
+    const requestedStage = STAGE_SET.has(target?.stage) ? target.stage : "target";
 
     const score = Number.isFinite(Number(target?.targetScore))
       ? Math.max(0, Math.min(100, Math.round(Number(target.targetScore))))
@@ -270,12 +280,18 @@ export async function importCrmTargetsFromEnv(pool) {
                 owner_user_id=COALESCE(owner_user_id,$5),
                 source_channel='linkedin',
                 source_profile=COALESCE(NULLIF($6,''),source_profile),
-                signal=COALESCE(NULLIF($7,''),signal),
-                notes=COALESCE(NULLIF($8,''),notes),
-                target_score=$9,
-                score_breakdown=$10::jsonb,
-                score_reason=$11,
-                score_version=$12,
+                source_detail=COALESCE(NULLIF($7,''),source_detail),
+                stage=CASE
+                  WHEN array_position($8::text[], stage) IS NULL THEN $9
+                  WHEN array_position($8::text[], $9) > array_position($8::text[], stage) THEN $9
+                  ELSE stage
+                END,
+                signal=COALESCE(NULLIF($10,''),signal),
+                notes=COALESCE(NULLIF($11,''),notes),
+                target_score=$12,
+                score_breakdown=$13::jsonb,
+                score_reason=$14,
+                score_version=$15,
                 scored_at=NOW(),
                 updated_at=NOW()
           WHERE id=$1`,
@@ -286,6 +302,9 @@ export async function importCrmTargetsFromEnv(pool) {
           cleanText(target?.segment,100),
           ownerId,
           cleanText(target?.sourceProfile || "Juan David",100),
+          cleanText(target?.sourceDetail || "prospecting-score",180),
+          CRM_STAGES,
+          requestedStage,
           cleanText(target?.signal,500),
           cleanText(target?.notes,4000),
           score,
@@ -301,7 +320,7 @@ export async function importCrmTargetsFromEnv(pool) {
         `INSERT INTO crm_contacts(
           id,name,company,title,linkedin_url,segment,owner_user_id,source_channel,source_profile,
           source_detail,stage,signal,notes,target_score,score_breakdown,score_reason,score_version,scored_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,'target',$10,$11,$12,$13::jsonb,$14,$15,NOW())`,
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,NOW())`,
         [
           contactId,
           name,
@@ -312,6 +331,7 @@ export async function importCrmTargetsFromEnv(pool) {
           ownerId,
           cleanText(target?.sourceProfile || "Juan David",100),
           cleanNullable(target?.sourceDetail || "prospecting-score",180),
+          requestedStage,
           cleanNullable(target?.signal,500),
           cleanNullable(target?.notes,4000),
           score,
@@ -321,16 +341,54 @@ export async function importCrmTargetsFromEnv(pool) {
         ]
       );
       await pool.query(
-        `INSERT INTO crm_activities(id,contact_id,type,direction,summary,metadata)
-         VALUES ($1,$2,'note','internal',$3,$4::jsonb)`,
+        `INSERT INTO crm_activities(id,contact_id,type,direction,summary,metadata,created_by)
+         VALUES ($1,$2,'note','internal',$3,$4::jsonb,$5)`,
         [
           crypto.randomUUID(),
           contactId,
           "Target incorporado por scoring de prospección",
-          JSON.stringify({ targetScore:score, scoreVersion })
+          JSON.stringify({ targetScore:score, scoreVersion }),
+          ownerId
         ]
       );
       imported += 1;
+    }
+
+    const activity = target?.activity;
+    if (activity?.summary) {
+      const activityType = ACTIVITY_TYPES.has(activity.type) ? activity.type : "note";
+      const direction = ["inbound","outbound","internal"].includes(activity.direction)
+        ? activity.direction
+        : "internal";
+      const summary = cleanText(activity.summary, 2000);
+      const existsActivity = await pool.query(
+        `SELECT id FROM crm_activities
+          WHERE contact_id=$1 AND type=$2 AND direction=$3 AND summary=$4
+          LIMIT 1`,
+        [contactId, activityType, direction, summary]
+      );
+      if (!existsActivity.rowCount) {
+        await pool.query(
+          `INSERT INTO crm_activities(id,contact_id,type,direction,summary,occurred_at,created_by,metadata)
+           VALUES ($1,$2,$3,$4,$5,COALESCE($6::timestamptz,NOW()),$7,$8::jsonb)`,
+          [
+            crypto.randomUUID(),
+            contactId,
+            activityType,
+            direction,
+            summary,
+            activity.occurredAt || null,
+            ownerId,
+            JSON.stringify(activity.metadata && typeof activity.metadata === "object" ? activity.metadata : {})
+          ]
+        );
+        if (activityType !== "note" && activityType !== "stage_change") {
+          await pool.query(
+            "UPDATE crm_contacts SET last_contact_at=NOW(),updated_at=NOW() WHERE id=$1",
+            [contactId]
+          );
+        }
+      }
     }
 
     const task = target?.task;
