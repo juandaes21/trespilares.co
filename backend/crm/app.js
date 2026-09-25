@@ -307,7 +307,7 @@ async function openContact(id) {
     const c=data.contact;
     $("#detail-name").textContent=c.name;
     $("#detail-body").innerHTML=renderContactDetail(data);
-    $("#detail-dialog").showModal();
+    if (!$("#detail-dialog").open) $("#detail-dialog").showModal();
     bindContactDetail(data);
   } catch (error) {
     alert(error.message);
@@ -679,7 +679,10 @@ function buildLinkedInDrafts(contact) {
   const name=firstName(contact?.name);
   const company=String(contact?.company||"").trim();
   const title=String(contact?.title||"").trim();
-  const signal=compactSignal(contact?.signal||"",105);
+  const rawSignal=compactSignal(contact?.signal||"",105);
+  const internalSignal=/encaje|score|perfil emprendedor|sin una señal|prioridad|\bicp\b/i.test(rawSignal);
+  const activitySignal=/post|publicaci[oó]n|comparti[oó]|escribi[oó]|coment[oó]|evento|certificaci[oó]n|lanzamiento|ascenso|nuevo rol/i.test(rawSignal);
+  const signal=rawSignal && activitySignal && !internalSignal ? rawSignal : "";
   const who=[title,company].filter(Boolean).join(" en ");
   const reference=signal ? "Vi "+signal.charAt(0).toLowerCase()+signal.slice(1) : (who ? "Me llamó la atención tu trabajo como "+who : "Me pareció interesante tu perfil");
 
@@ -700,7 +703,7 @@ function buildLinkedInDrafts(contact) {
     "cierro el loop por aquí para no llenarte de mensajes. Si más adelante te sirve contrastar cómo estás ordenando protección, capital y objetivos de largo plazo, con gusto conversamos. Un abrazo.";
 
   const comment=signal
-    ? "Buen punto. Me parece interesante especialmente "+signal.charAt(0).toLowerCase()+signal.slice(1)+". Creo que ahí hay una conversación importante entre crecimiento, decisiones financieras y horizonte de largo plazo."
+    ? "Buen punto. Me parece interesante especialmente "+signal.charAt(0).toLowerCase()+signal.slice(1)+". Hay una conversación valiosa ahí sobre cómo una decisión operativa termina impactando la estructura financiera y el horizonte de largo plazo."
     : "";
 
   return { invite,firstDm,follow1,follow2,comment };
