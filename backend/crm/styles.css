@@ -266,3 +266,6 @@ tbody tr:hover{background:#fcfaf7}
 .manual-interaction form{margin-top:12px}
 .empty.compact{padding:14px;min-height:0}
 @media (max-width:640px){.interaction-grid{grid-template-columns:1fr}}
+
+.stage-message-hint{padding:14px 15px;border:1px solid #e7dfd2;border-radius:13px;background:#f8f5ef;color:var(--green-deep);font-size:.78rem;line-height:1.55}
+.stage-draft textarea{min-height:116px}
