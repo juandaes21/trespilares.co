@@ -409,11 +409,11 @@ export async function importCrmTargetsFromEnv(pool) {
                 score_version=COALESCE($15,score_version),
                 email=COALESCE(NULLIF($16,''),email),
                 linkedin_url=COALESCE(NULLIF($17,''),linkedin_url),
-                 linkedin_invite_note=COALESCE(NULLIF($18,''),linkedin_invite_note),
-                 linkedin_first_dm_draft=COALESCE(NULLIF($19,''),linkedin_first_dm_draft),
-                 linkedin_followup_1_draft=COALESCE(NULLIF($20,''),linkedin_followup_1_draft),
-                 linkedin_followup_2_draft=COALESCE(NULLIF($21,''),linkedin_followup_2_draft),
-                 linkedin_comment_draft=COALESCE(NULLIF($22,''),linkedin_comment_draft),
+                 linkedin_invite_note=CASE WHEN $23::boolean THEN NULLIF($18,'') ELSE COALESCE(NULLIF($18,''),linkedin_invite_note) END,
+                 linkedin_first_dm_draft=CASE WHEN $23::boolean THEN NULLIF($19,'') ELSE COALESCE(NULLIF($19,''),linkedin_first_dm_draft) END,
+                 linkedin_followup_1_draft=CASE WHEN $23::boolean THEN NULLIF($20,'') ELSE COALESCE(NULLIF($20,''),linkedin_followup_1_draft) END,
+                 linkedin_followup_2_draft=CASE WHEN $23::boolean THEN NULLIF($21,'') ELSE COALESCE(NULLIF($21,''),linkedin_followup_2_draft) END,
+                 linkedin_comment_draft=CASE WHEN $23::boolean THEN NULLIF($22,'') ELSE COALESCE(NULLIF($22,''),linkedin_comment_draft) END,
                 scored_at=CASE WHEN $12 IS NULL THEN scored_at ELSE NOW() END,
                 updated_at=NOW()
           WHERE id=$1`,
@@ -439,7 +439,8 @@ export async function importCrmTargetsFromEnv(pool) {
           cleanText(target?.linkedinFirstDmDraft,4000),
           cleanText(target?.linkedinFollowup1Draft,4000),
           cleanText(target?.linkedinFollowup2Draft,4000),
-          cleanText(target?.linkedinCommentDraft,4000)
+          cleanText(target?.linkedinCommentDraft,4000),
+          target?.replaceLinkedinDrafts === true
         ]
       );
       updated += 1;
