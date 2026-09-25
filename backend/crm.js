@@ -1408,6 +1408,7 @@ export function createCrmRouter({ pool }) {
   router.post("/linkedin/contacts/:id/action", auth, writeAccess, async (req, res) => {
     const action = cleanText(req.body?.action, 40);
     const allowed = new Set([
+      "comment_sent",
       "invite_sent",
       "accepted",
       "first_dm_sent",
@@ -1443,7 +1444,21 @@ export function createCrmRouter({ pool }) {
       let nextTask = null;
       let completeTypes = [];
 
-      if (action === "invite_sent") {
+      if (action === "comment_sent") {
+        const wasTarget = stage === "target";
+        stage = forwardStage(stage,"engaged");
+        summary = "Comentario realizado en LinkedIn";
+        direction = "outbound";
+        completeTypes = ["linkedin_comment"];
+        if (wasTarget) {
+          nextTask = {
+            type:"linkedin_connect",
+            title:"Evaluar conexión después de interacción",
+            dueSql:"NOW()+INTERVAL '1 day'",
+            notes:"Ya hubo una interacción pública. Si sigue siendo buen fit, enviar una invitación contextual y sin pitch."
+          };
+        }
+      } else if (action === "invite_sent") {
         stage = forwardStage(stage,"engaged");
         summary = "Invitación de conexión enviada en LinkedIn";
         direction = "outbound";
@@ -1567,7 +1582,9 @@ export function createCrmRouter({ pool }) {
           [
             crypto.randomUUID(),
             req.params.id,
-            action === "invite_sent" || action === "accepted" ? "linkedin_connection" : "linkedin_dm",
+            action === "comment_sent"
+              ? "linkedin_comment"
+              : (action === "invite_sent" || action === "accepted" ? "linkedin_connection" : "linkedin_dm"),
             direction,
             summary,
             req.crmUser.id,
