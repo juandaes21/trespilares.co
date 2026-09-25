@@ -203,29 +203,47 @@ async function loadUsers() {
 
 async function loadDashboard() {
   try {
-    const [dashboard,tasks] = await Promise.all([
+    const [dashboard,tasks,linkedin] = await Promise.all([
       api("/dashboard"),
-      api("/tasks?scope=today&mine=1")
+      api("/tasks?scope=today&mine=1"),
+      api("/linkedin/today")
     ]);
     state.dashboard=dashboard;
-    renderDashboard(dashboard,tasks.tasks || []);
+    state.linkedin=linkedin;
+    renderDashboard(dashboard,tasks.tasks || [],linkedin);
   } catch (error) {
     $("#dashboard-cards").innerHTML=empty(error.message);
   }
 }
 
-function renderDashboard(data,tasks) {
+function renderDashboard(data,tasks,linkedin={}) {
   const counts=Object.fromEntries((data.stages || []).map(x=>[x.stage,Number(x.count)]));
   const active = ["conversation","need_identified","meeting_proposed"].reduce((n,k)=>n+(counts[k]||0),0);
   const cards = [
-    ["Conversaciones activas",active,"Relaciones con contexto"],
-    ["Citas próximos 7 días",Number(data.meetings?.upcoming||0),"Agenda confirmada"],
-    ["Tareas para hoy",Number(data.tasks?.due_today||0),"Próximas acciones"],
-    ["Tareas vencidas",Number(data.tasks?.overdue||0),"Requieren atención"]
+    { label:"Conversaciones activas",value:active,sub:"Relaciones con contexto",go:"pipeline",tone:active>0?"positive":"" },
+    { label:"Citas próximos 7 días",value:Number(data.meetings?.upcoming||0),sub:"Agenda confirmada",go:"pipeline",tone:"" },
+    { label:"Tareas para hoy",value:Number(data.tasks?.due_today||0),sub:"Próximas acciones",go:"tasks",tone:Number(data.tasks?.due_today||0)>0?"focus":"" },
+    { label:"Tareas vencidas",value:Number(data.tasks?.overdue||0),sub:"Requieren atención",go:"tasks",tone:Number(data.tasks?.overdue||0)>0?"warning":"" }
   ];
-  $("#dashboard-cards").innerHTML=cards.map(([label,value,sub])=>
-    '<article class="metric-card"><small>'+esc(label)+'</small><strong>'+value+'</strong><em>'+esc(sub)+'</em></article>'
+  $("#dashboard-cards").innerHTML=cards.map(card=>
+    '<button class="metric-card metric-card-button '+esc(card.tone)+'" type="button" data-go="'+esc(card.go)+'">'+
+      '<small>'+esc(card.label)+'</small><strong>'+card.value+'</strong><em>'+esc(card.sub)+'</em>'+
+      '<span class="metric-arrow">→</span>'+
+    '</button>'
   ).join("");
+
+  const liStats=linkedin?.stats||{};
+  const liPolicy=linkedin?.policy||{};
+  if ($("#linkedin-invites-today")) $("#linkedin-invites-today").textContent=Number(liStats.invites_today||0)+"/"+Number(liPolicy.dailyTarget||5);
+  if ($("#linkedin-pending")) $("#linkedin-pending").textContent=Number(liStats.pending||0);
+  if ($("#linkedin-stale")) {
+    const stale=Number(liStats.stale_pending||0);
+    $("#linkedin-stale").textContent=stale+" con más de "+Number(liPolicy.staleDays||14)+" días";
+  }
+  if ($("#linkedin-acceptance")) $("#linkedin-acceptance").textContent=Number(liStats.acceptance_rate||0).toFixed(1).replace(".0","")+"%";
+  if ($("#linkedin-conversations")) $("#linkedin-conversations").textContent=Number(liStats.conversations_or_beyond||0);
+
+  $("[data-go]",$("#view-dashboard")).forEach(btn=>btn.addEventListener("click",()=>showView(btn.dataset.go)));
 
   const funnelStages = ["connected","conversation","need_identified","booked","diagnostic","proposal","won"];
   const maxCount=max(funnelStages.map(k=>counts[k]||0));
