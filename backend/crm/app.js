@@ -400,7 +400,7 @@ function renderContactDetail(data) {
         '<div class="draft-block"><div class="draft-head"><strong>Comentario</strong><small>Escribe o ajusta antes de publicar</small></div>'+
           '<textarea id="linkedin-comment-draft" rows="4" placeholder="Escribe aquí el comentario para esta publicación…">'+esc(commentDraft)+'</textarea>'+
           '<button class="text-action" type="button" data-copy-draft="linkedin-comment-draft">Copiar comentario</button></div>'+
-        '<div class="modal-actions draft-actions"><button class="btn ghost" type="button" id="regenerate-linkedin-drafts">Regenerar base</button><button class="btn primary" type="button" id="save-linkedin-drafts">Guardar borradores</button></div>'+
+        '<div class="modal-actions draft-actions"><button class="btn ghost" type="button" id="regenerate-linkedin-drafts">Regenerar con IA</button><button class="btn primary" type="button" id="save-linkedin-drafts">Guardar borradores</button></div>'+
       '</div>':'')+
       '<div class="detail-card interaction-card"><div class="panel-head"><div><span class="eyebrow">ACCIÓN RÁPIDA</span><h3>Registrar interacción</h3></div><span class="stage-badge">'+esc(stageLabel(c.stage))+'</span></div>'+
         (c.source_channel==="linkedin"
@@ -466,17 +466,28 @@ function bindContactDetail(data) {
     setTimeout(()=>{ if(btn.isConnected) btn.textContent=old; },1200);
   }));
 
-  $("#regenerate-linkedin-drafts")?.addEventListener("click",()=>{
-    const drafts=buildLinkedInDrafts(data.contact);
-    const freshStage=linkedinStageDraft(data.contact,drafts);
-    if (freshStage?.id) {
-      const el=$("#"+freshStage.id);
-      if(el) el.value=freshStage.value || "";
-      const counter=$("#stage-draft-count");
-      if(counter && freshStage.maxLength) counter.textContent=(freshStage.value||"").length+"/"+freshStage.maxLength;
+  $("#regenerate-linkedin-drafts")?.addEventListener("click",async()=>{
+    const btn=$("#regenerate-linkedin-drafts");
+    const old=btn?.textContent || "Regenerar con IA";
+    if(btn){
+      btn.disabled=true;
+      btn.textContent="Generando…";
     }
-    const comment=$("#linkedin-comment-draft");
-    if(comment) comment.value=drafts.comment || "";
+    try {
+      await api("/linkedin/contacts/"+id+"/regenerate-drafts",{
+        method:"POST",
+        body:{}
+      });
+      await openContact(id);
+    } catch(error) {
+      alert(error.message || "No pudimos regenerar los mensajes con IA.");
+    } finally {
+      const current=$("#regenerate-linkedin-drafts");
+      if(current){
+        current.disabled=false;
+        current.textContent=old;
+      }
+    }
   });
 
   $("#save-linkedin-drafts")?.addEventListener("click",async()=>{
