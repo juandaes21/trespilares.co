@@ -81,30 +81,42 @@
       </header>
 
       <section id="view-dashboard" class="view active-view">
-        <div id="dashboard-cards" class="metric-grid"></div>
-        <div class="metric-grid linkedin-metrics">
-          <article class="metric-card"><small>Invitaciones hoy</small><strong id="linkedin-invites-today">0/5</strong><em>Meta operativa, no límite de LinkedIn</em></article>
-          <article class="metric-card"><small>Pendientes</small><strong id="linkedin-pending">0</strong><em id="linkedin-stale">0 con más de 14 días</em></article>
-          <article class="metric-card"><small>Aceptación</small><strong id="linkedin-acceptance">0%</strong><em>Conectados / invitaciones registradas</em></article>
-          <article class="metric-card"><small>Conversación +</small><strong id="linkedin-conversations">0</strong><em>Prospectos que ya avanzaron</em></article>
+        <div class="dashboard-section-head">
+          <div><span class="eyebrow">PULSO COMERCIAL</span><h2>Lo que necesita atención hoy</h2></div>
+          <button class="text-action" data-go="tasks">Ver tareas</button>
         </div>
-        <div class="grid-2">
+        <div id="dashboard-cards" class="metric-grid dashboard-primary-metrics"></div>
+
+        <article class="linkedin-strip">
+          <div class="linkedin-strip-head">
+            <div><span class="eyebrow">LINKEDIN ENGINE</span><strong>Prospección</strong></div>
+            <button class="text-action" data-go="linkedin">Abrir LinkedIn</button>
+          </div>
+          <div class="linkedin-strip-metrics">
+            <div><small>Invitaciones hoy</small><strong id="linkedin-invites-today">0/5</strong><em>meta operativa</em></div>
+            <div><small>Pendientes</small><strong id="linkedin-pending">0</strong><em id="linkedin-stale">0 antiguas</em></div>
+            <div><small>Aceptación</small><strong id="linkedin-acceptance">0%</strong><em>conectados / invitaciones</em></div>
+            <div><small>Conversación +</small><strong id="linkedin-conversations">0</strong><em>prospectos que avanzaron</em></div>
+          </div>
+        </article>
+
+        <div class="grid-2 dashboard-main-grid">
           <article class="panel">
-            <div class="panel-head"><div><span class="eyebrow">FUNNEL</span><h2>Pipeline comercial</h2></div></div>
+            <div class="panel-head"><div><span class="eyebrow">PIPELINE</span><h2>Avance comercial</h2></div><button class="text-action" data-go="pipeline">Ver pipeline</button></div>
             <div id="dashboard-funnel" class="funnel-list"></div>
           </article>
           <article class="panel">
-            <div class="panel-head"><div><span class="eyebrow">HOY</span><h2>Próximas acciones</h2></div><button class="text-action" data-go="tasks">Ver todas</button></div>
+            <div class="panel-head"><div><span class="eyebrow">PRIORIDAD</span><h2>Próximas acciones</h2></div><button class="text-action" data-go="tasks">Ver todas</button></div>
             <div id="dashboard-tasks" class="stack-list"></div>
           </article>
         </div>
         <div class="grid-2">
           <article class="panel">
-            <div class="panel-head"><div><span class="eyebrow">ORIGEN</span><h2>Leads por canal</h2></div></div>
+            <div class="panel-head"><div><span class="eyebrow">ORIGEN</span><h2>De dónde llegan</h2></div></div>
             <div id="dashboard-sources" class="bar-list"></div>
           </article>
           <article class="panel">
-            <div class="panel-head"><div><span class="eyebrow">ATRIBUCIÓN</span><h2>Contenido que genera conversación</h2></div><button class="text-action" data-go="content">Contenido</button></div>
+            <div class="panel-head"><div><span class="eyebrow">ATRIBUCIÓN</span><h2>Contenido que mueve relaciones</h2></div><button class="text-action" data-go="content">Ver contenido</button></div>
             <div id="dashboard-content" class="stack-list"></div>
           </article>
         </div>
