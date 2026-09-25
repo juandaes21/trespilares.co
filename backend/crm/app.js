@@ -397,8 +397,11 @@ function renderContactDetail(data) {
             '</div>'+
             '<textarea id="'+esc(stageDraft?.id||"linkedin-stage-draft")+'" rows="5" '+(stageDraft?.maxLength?'maxlength="'+stageDraft.maxLength+'"':'')+'>'+esc(stageDraft?.value||"")+'</textarea>'+
             '<button class="text-action" type="button" data-copy-draft="'+esc(stageDraft?.id||"linkedin-stage-draft")+'">'+esc(stageDraft?.copy||"Copiar mensaje")+'</button></div>')+
-        '<div class="draft-block"><div class="draft-head"><strong>Comentario</strong><small>Escribe o ajusta antes de publicar</small></div>'+
-          '<textarea id="linkedin-comment-draft" rows="4" placeholder="Escribe aquí el comentario para esta publicación…">'+esc(commentDraft)+'</textarea>'+
+        '<div class="draft-block comment-ai-block"><div class="draft-head"><strong>Comentario</strong><small>Solo con contexto real del post</small></div>'+
+          '<label class="post-context-label">Post / idea a comentar'+
+            '<textarea id="linkedin-post-context" rows="3" placeholder="Pega aquí el texto del post o resume fielmente la idea concreta…">'+esc(c.linkedin_post_context||"")+'</textarea>'+
+          '</label>'+
+          '<textarea id="linkedin-comment-draft" rows="4" placeholder="La IA dejará esto vacío si no hay contexto real del post.">'+esc(commentDraft)+'</textarea>'+
           '<button class="text-action" type="button" data-copy-draft="linkedin-comment-draft">Copiar comentario</button></div>'+
         '<div class="modal-actions draft-actions"><button class="btn ghost" type="button" id="regenerate-linkedin-drafts">Regenerar con IA</button><button class="btn primary" type="button" id="save-linkedin-drafts">Guardar borradores</button></div>'+
       '</div>':'')+
@@ -476,7 +479,7 @@ function bindContactDetail(data) {
     try {
       await api("/linkedin/contacts/"+id+"/regenerate-drafts",{
         method:"POST",
-        body:{ postContext:$("#detail-signal")?.value || "" }
+        body:{ postContext:$("#linkedin-post-context")?.value || "" }
       });
       await openContact(id);
     } catch(error) {
@@ -499,7 +502,8 @@ function bindContactDetail(data) {
           ...(stageDraft?.id==="linkedin-first-dm-draft" ? { linkedinFirstDmDraft:$("#linkedin-first-dm-draft")?.value || "" } : {}),
           ...(stageDraft?.id==="linkedin-followup-1-draft" ? { linkedinFollowup1Draft:$("#linkedin-followup-1-draft")?.value || "" } : {}),
           ...(stageDraft?.id==="linkedin-followup-2-draft" ? { linkedinFollowup2Draft:$("#linkedin-followup-2-draft")?.value || "" } : {}),
-          linkedinCommentDraft:$("#linkedin-comment-draft")?.value || ""
+          linkedinCommentDraft:$("#linkedin-comment-draft")?.value || "",
+          linkedinPostContext:$("#linkedin-post-context")?.value || ""
         }
       });
       const btn=$("#save-linkedin-drafts");
