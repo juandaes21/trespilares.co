@@ -29,7 +29,10 @@ const state = {
   dashboard:null,
   content:[],
   linkedin:null,
-  taskScope:"open"
+  taskScope:"open",
+  contentStatus:"all",
+  contentProfile:"",
+  contentFormat:""
 };
 
 const $ = (selector, root=document) => root?.querySelector(selector) || null;
@@ -118,6 +121,21 @@ function bindGlobalEvents() {
   $("#task-form")?.addEventListener("submit",createTask);
   $("#content-form")?.addEventListener("submit",createContent);
   $("#team-form")?.addEventListener("submit",createUser);
+
+  $("[data-content-status]").forEach(btn=>btn.addEventListener("click",()=>{
+    $("[data-content-status]").forEach(x=>x.classList.remove("active"));
+    btn.classList.add("active");
+    state.contentStatus=btn.dataset.contentStatus || "all";
+    renderContent();
+  }));
+  $("#content-profile-filter")?.addEventListener("change",event=>{
+    state.contentProfile=event.currentTarget.value || "";
+    renderContent();
+  });
+  $("#content-format-filter")?.addEventListener("change",event=>{
+    state.contentFormat=event.currentTarget.value || "";
+    renderContent();
+  });
 
   $("#contact-search")?.addEventListener("input",debounce(loadContacts,250));
   $("#contact-stage-filter")?.addEventListener("change",loadContacts);
@@ -1009,22 +1027,109 @@ function trackingUrl(item) {
   return "https://trespilares.co/?"+params.toString()+"#agenda";
 }
 
-function renderContent() {
-  $("#content-grid").innerHTML=state.content.length ? state.content.map(item=>
-    '<article class="content-card">'+
-      '<span class="eyebrow">'+esc(item.profile)+' · '+esc(item.status)+'</span>'+
-      '<h3>'+esc(item.title)+'</h3>'+
-      '<p>'+esc([item.pillar,item.topic].filter(Boolean).join(" · ") || "Sin clasificación")+'</p>'+
-      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><span class="tracking-code">'+esc(item.tracking_code)+'</span><button class="text-action" data-copy="'+esc(trackingUrl(item))+'">Copiar link medible</button></div>'+
-      '<div class="content-stats"><div><strong>'+Number(item.contacts||0)+'</strong><small>CONTACTOS</small></div><div><strong>'+Number(item.meetings_or_beyond||0)+'</strong><small>REUNIÓN+</small></div></div>'+
-    '</article>'
-  ).join("") : empty("Aún no hay contenido registrado.");
+function contentStatusLabel(status) {
+  return ({
+    idea:"Idea",
+    draft:"En producción",
+    ready:"Listo",
+    scheduled:"Programado",
+    published:"Publicado"
+  })[status] || status || "—";
+}
 
-  $$("[data-copy]").forEach(btn=>btn.addEventListener("click",async()=>{
+function contentFormatLabel(format) {
+  return ({
+    reel:"Reel / Short",
+    carousel:"Carrusel",
+    post:"Post texto",
+    document:"Documento",
+    story:"Story"
+  })[format] || format || "Sin formato";
+}
+
+function filteredContent() {
+  return state.content.filter(item=>{
+    if (state.contentStatus !== "all" && item.status !== state.contentStatus) return false;
+    if (state.contentProfile && item.profile !== state.contentProfile) return false;
+    if (state.contentFormat && item.format !== state.contentFormat) return false;
+    return true;
+  });
+}
+
+function contentCard(item) {
+  const when=item.status==="published"
+    ? (item.published_at ? "Publicado "+fmtDate(item.published_at,{dateStyle:"medium"}) : "Publicado")
+    : item.status==="scheduled"
+      ? (item.scheduled_at ? "Programado "+fmtDate(item.scheduled_at) : "Programado")
+      : "Actualizado "+fmtDate(item.updated_at||item.created_at,{dateStyle:"medium",time:false});
+  const hook=item.hook ? '<p class="content-hook">“'+esc(item.hook)+'”</p>' : "";
+  const body=item.content_body ? '<p class="content-preview">'+esc(item.content_body.slice(0,180))+(item.content_body.length>180?"…":"")+'</p>' : "";
+  return '<article class="content-work-card">'+
+    '<div class="content-work-head"><span class="stage-badge content-status-'+esc(item.status)+'">'+esc(contentStatusLabel(item.status))+'</span><span class="content-profile">'+esc(item.profile)+'</span></div>'+
+    '<h3>'+esc(item.title)+'</h3>'+
+    '<div class="content-meta">'+
+      '<span>'+esc(contentFormatLabel(item.format))+'</span>'+
+      (item.pillar?'<span>'+esc(item.pillar)+'</span>':'')+
+      (item.topic?'<span>'+esc(item.topic)+'</span>':'')+
+    '</div>'+
+    hook+
+    body+
+    '<div class="content-work-footer"><small>'+esc(when)+'</small>'+
+      '<div class="content-mini-stats"><span><strong>'+Number(item.contacts||0)+'</strong> contactos</span><span><strong>'+Number(item.meetings_or_beyond||0)+'</strong> reunión+</span></div>'+
+    '</div>'+
+    (item.tracking_code?'<div class="content-card-actions"><button class="text-action" data-copy="'+esc(trackingUrl(item))+'">Copiar link medible</button>'+(item.url?'<a class="text-action" href="'+esc(item.url)+'" target="_blank" rel="noopener">Ver publicación</a>':'')+'</div>':'')+
+  '</article>';
+}
+
+function renderContent() {
+  const all=state.content||[];
+  const now=Date.now();
+  const thirtyDaysAgo=now-(30*24*60*60*1000);
+  const metrics=[
+    ["Ideas",all.filter(x=>x.status==="idea").length,"Backlog editorial"],
+    ["En producción",all.filter(x=>x.status==="draft").length,"Piezas en desarrollo"],
+    ["Programado",all.filter(x=>x.status==="scheduled").length,"Listas para salir"],
+    ["Publicadas 30d",all.filter(x=>x.status==="published" && x.published_at && new Date(x.published_at).getTime()>=thirtyDaysAgo).length,"Cadencia reciente"]
+  ];
+  $("#content-metrics").innerHTML=metrics.map(([label,value,sub])=>
+    '<article class="metric-card"><small>'+esc(label)+'</small><strong>'+value+'</strong><em>'+esc(sub)+'</em></article>'
+  ).join("");
+
+  const items=filteredContent();
+  const columns=[
+    ["idea","Ideas"],
+    ["draft","En producción"],
+    ["ready","Listo"],
+    ["scheduled","Programado"],
+    ["published","Publicado"]
+  ];
+  $("#content-board").innerHTML=columns.map(([status,label])=>{
+    const rows=items.filter(x=>x.status===status);
+    return '<section class="content-board-col">'+
+      '<div class="content-board-head"><strong>'+esc(label)+'</strong><span>'+rows.length+'</span></div>'+
+      '<div class="content-board-list">'+(rows.length?rows.map(contentCard).join(""):empty("Sin piezas."))+'</div>'+
+    '</section>';
+  }).join("");
+
+  const performance=[...all]
+    .filter(x=>x.status==="published")
+    .sort((a,b)=>(Number(b.meetings_or_beyond||0)-Number(a.meetings_or_beyond||0)) || (Number(b.contacts||0)-Number(a.contacts||0)))
+    .slice(0,8);
+  $("#content-performance").innerHTML=performance.length
+    ? performance.map(item=>
+      '<div class="content-performance-row">'+
+        '<div><strong>'+esc(item.title)+'</strong><small>'+esc(item.profile)+' · '+esc(contentFormatLabel(item.format))+(item.pillar?' · '+esc(item.pillar):'')+'</small></div>'+
+        '<div><strong>'+Number(item.contacts||0)+'</strong><small>contactos</small></div>'+
+        '<div><strong>'+Number(item.meetings_or_beyond||0)+'</strong><small>reunión+</small></div>'+
+      '</div>'
+    ).join("")
+    : empty("Cuando publiques piezas, aquí veremos cuáles generan relaciones y reuniones.");
+
+  $$("[data-copy]",$("#view-content")).forEach(btn=>btn.addEventListener("click",async()=>{
     await navigator.clipboard.writeText(btn.dataset.copy);
     const old=btn.textContent;
     btn.textContent="Copiado";
-    setTimeout(()=>btn.textContent=old,1200);
+    setTimeout(()=>{ if(btn.isConnected) btn.textContent=old; },1200);
   }));
 }
 
@@ -1038,12 +1143,18 @@ async function createContent(event) {
       method:"POST",
       body:{
         profile:form.get("profile"),
+        platform:form.get("platform"),
+        format:form.get("format"),
         title:form.get("title"),
+        hook:form.get("hook"),
+        contentBody:form.get("contentBody"),
+        goal:form.get("goal"),
         url:form.get("url"),
         pillar:form.get("pillar"),
         topic:form.get("topic"),
         cta:form.get("cta"),
         status:form.get("status"),
+        scheduledAt:form.get("scheduledAt") ? new Date(form.get("scheduledAt")).toISOString() : null,
         publishedAt:publishedAt ? new Date(publishedAt).toISOString() : null
       }
     });
