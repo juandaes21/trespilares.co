@@ -409,6 +409,11 @@ export async function importCrmTargetsFromEnv(pool) {
                 score_version=COALESCE($15,score_version),
                 email=COALESCE(NULLIF($16,''),email),
                 linkedin_url=COALESCE(NULLIF($17,''),linkedin_url),
+                 linkedin_invite_note=COALESCE(NULLIF($18,''),linkedin_invite_note),
+                 linkedin_first_dm_draft=COALESCE(NULLIF($19,''),linkedin_first_dm_draft),
+                 linkedin_followup_1_draft=COALESCE(NULLIF($20,''),linkedin_followup_1_draft),
+                 linkedin_followup_2_draft=COALESCE(NULLIF($21,''),linkedin_followup_2_draft),
+                 linkedin_comment_draft=COALESCE(NULLIF($22,''),linkedin_comment_draft),
                 scored_at=CASE WHEN $12 IS NULL THEN scored_at ELSE NOW() END,
                 updated_at=NOW()
           WHERE id=$1`,
