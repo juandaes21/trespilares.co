@@ -400,6 +400,14 @@ function renderContactDetail(data) {
 
 function bindContactDetail(data) {
   const id=data.contact.id;
+  const generatedDrafts=buildLinkedInDrafts(data.contact);
+  const storedDrafts={
+    invite:data.contact.linkedin_invite_note || generatedDrafts.invite,
+    firstDm:data.contact.linkedin_first_dm_draft || generatedDrafts.firstDm,
+    follow1:data.contact.linkedin_followup_1_draft || generatedDrafts.follow1,
+    follow2:data.contact.linkedin_followup_2_draft || generatedDrafts.follow2
+  };
+  const stageDraft=linkedinStageDraft(data.contact,storedDrafts);
   $("#save-contact")?.addEventListener("click",async()=>{
     try {
       await api("/contacts/"+id,{
