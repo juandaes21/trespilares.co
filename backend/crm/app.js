@@ -382,10 +382,14 @@ function renderContactDetail(data) {
           '<button class="text-action" type="button" data-copy-draft="linkedin-followup-2-draft">Copiar</button></div>'+
         '<div class="modal-actions draft-actions"><button class="btn ghost" type="button" id="regenerate-linkedin-drafts">Regenerar base</button><button class="btn primary" type="button" id="save-linkedin-drafts">Guardar borradores</button></div>'+
       '</div>':'')+
-      '<div class="detail-card"><h3>Registrar interacción</h3><form id="activity-form" class="form-grid">'+
-        '<label>Tipo<select name="type"><option value="linkedin_dm">DM LinkedIn</option><option value="linkedin_comment">Comentario LinkedIn</option><option value="linkedin_connection">Conexión LinkedIn</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="call">Llamada</option><option value="meeting">Reunión</option><option value="note">Nota</option></select></label>'+
-        '<label>Resumen<textarea name="summary" rows="2" required></textarea></label>'+
-        '<button class="btn ghost" type="submit">Registrar</button></form></div>'+
+      '<div class="detail-card interaction-card"><div class="panel-head"><div><span class="eyebrow">ACCIÓN RÁPIDA</span><h3>Registrar interacción</h3></div><span class="stage-badge">'+esc(stageLabel(c.stage))+'</span></div>'+
+        (c.source_channel==="linkedin"
+          ? linkedinQuickButtons(c)
+          : '<div class="empty compact">Las acciones rápidas se muestran para prospectos de LinkedIn.</div>')+
+        '<details class="manual-interaction"><summary>Registrar otra interacción</summary><form id="activity-form" class="form-grid">'+
+          '<label>Tipo<select name="type"><option value="linkedin_dm">DM LinkedIn</option><option value="linkedin_comment">Comentario LinkedIn</option><option value="linkedin_connection">Conexión LinkedIn</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="call">Llamada</option><option value="meeting">Reunión</option><option value="note">Nota</option></select></label>'+
+          '<label>Resumen<textarea name="summary" rows="2" required></textarea></label>'+
+          '<button class="btn ghost" type="submit">Registrar manualmente</button></form></details></div>'+
       '<div class="detail-card"><h3>Reuniones</h3>'+appointments+'</div>'+
     '</div>'+
   '</div>'+
@@ -467,6 +471,7 @@ function bindContactDetail(data) {
   });
 
   bindLinkedInActions($("#detail-body"));
+  bindCrmStageActions($("#detail-body"));
 
   $("#activity-form")?.addEventListener("submit",async(event)=>{
     event.preventDefault();
@@ -688,13 +693,96 @@ function buildLinkedInDrafts(contact) {
 function linkedinNextAction(item) {
   if (!item) return null;
   if (item.stage === "target") return { action:"invite_sent",label:"Invitación enviada" };
-  if (item.stage === "engaged") return { action:"accepted",label:"Aceptó" };
+  if (item.stage === "engaged") {
+    return item.linkedin_invited_at
+      ? { action:"accepted",label:"Aceptó" }
+      : { action:"invite_sent",label:"Invitación enviada" };
+  }
   if (item.stage === "connected") {
     if (!item.linkedin_first_dm_at) return { action:"first_dm_sent",label:"DM enviado" };
     if (!item.linkedin_followup_1_at) return { action:"followup_1_sent",label:"Follow-up #1" };
     if (!item.linkedin_followup_2_at) return { action:"followup_2_sent",label:"Follow-up #2" };
   }
   return null;
+}
+
+function linkedinQuickButtons(contact) {
+  if (!contact || contact.source_channel !== "linkedin") return "";
+  const id=contact.id;
+  const buttons=[];
+
+  if (contact.stage === "target") {
+    buttons.push(
+      '<button class="interaction-btn" type="button" data-linkedin-action="comment_sent" data-contact-id="'+id+'">Comenté</button>',
+      '<button class="interaction-btn primary" type="button" data-linkedin-action="invite_sent" data-contact-id="'+id+'">Invitación enviada</button>'
+    );
+  } else if (contact.stage === "engaged") {
+    buttons.push('<button class="interaction-btn" type="button" data-linkedin-action="comment_sent" data-contact-id="'+id+'">Comenté</button>');
+    if (contact.linkedin_invited_at) {
+      buttons.push('<button class="interaction-btn primary" type="button" data-linkedin-action="accepted" data-contact-id="'+id+'">Aceptó conexión</button>');
+    } else {
+      buttons.push('<button class="interaction-btn primary" type="button" data-linkedin-action="invite_sent" data-contact-id="'+id+'">Invitación enviada</button>');
+    }
+  } else if (contact.stage === "connected") {
+    if (!contact.linkedin_first_dm_at) {
+      buttons.push('<button class="interaction-btn primary" type="button" data-linkedin-action="first_dm_sent" data-contact-id="'+id+'">Primer DM enviado</button>');
+    } else if (!contact.linkedin_followup_1_at) {
+      buttons.push('<button class="interaction-btn" type="button" data-linkedin-action="followup_1_sent" data-contact-id="'+id+'">Follow-up #1 enviado</button>');
+    } else if (!contact.linkedin_followup_2_at) {
+      buttons.push('<button class="interaction-btn" type="button" data-linkedin-action="followup_2_sent" data-contact-id="'+id+'">Follow-up #2 enviado</button>');
+    }
+    buttons.push('<button class="interaction-btn success" type="button" data-linkedin-action="reply_received" data-contact-id="'+id+'">Respondió</button>');
+  } else if (contact.stage === "conversation") {
+    buttons.push(
+      '<button class="interaction-btn" type="button" data-linkedin-action="comment_sent" data-contact-id="'+id+'">Comenté</button>',
+      '<button class="interaction-btn success" type="button" data-crm-stage="need_identified" data-contact-id="'+id+'">Necesidad identificada</button>'
+    );
+  } else if (contact.stage === "need_identified") {
+    buttons.push(
+      '<button class="interaction-btn" type="button" data-linkedin-action="comment_sent" data-contact-id="'+id+'">Comenté</button>',
+      '<button class="interaction-btn success" type="button" data-crm-stage="meeting_proposed" data-contact-id="'+id+'">Proponer reunión</button>'
+    );
+  } else if (contact.stage === "meeting_proposed") {
+    buttons.push('<button class="interaction-btn" type="button" data-linkedin-action="comment_sent" data-contact-id="'+id+'">Comenté</button>');
+  } else if (contact.stage === "nurture") {
+    buttons.push(
+      '<button class="interaction-btn" type="button" data-linkedin-action="comment_sent" data-contact-id="'+id+'">Nueva interacción</button>',
+      '<button class="interaction-btn" type="button" data-crm-stage="conversation" data-contact-id="'+id+'">Retomó conversación</button>'
+    );
+  }
+
+  return buttons.length
+    ? '<div class="interaction-grid">'+buttons.join("")+'</div>'
+    : '<div class="empty compact">No hay una acción rápida definida para esta etapa.</div>';
+}
+
+async function runCrmStageAction(contactId,stage) {
+  try {
+    await api("/contacts/"+contactId,{ method:"PATCH",body:{ stage } });
+    await Promise.all([loadDashboard(),loadLinkedIn()]);
+    if ($("#view-contacts")?.classList.contains("active-view")) await loadContacts();
+    if ($("#view-pipeline")?.classList.contains("active-view")) await loadPipeline();
+    if ($("#detail-dialog")?.open) await openContact(contactId);
+  } catch(error) {
+    alert(error.message || "No pudimos actualizar la etapa.");
+    throw error;
+  }
+}
+
+function bindCrmStageActions(root=document) {
+  $("[data-crm-stage]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+    const old=btn.textContent;
+    btn.disabled=true;
+    btn.textContent="Guardando…";
+    try {
+      await runCrmStageAction(btn.dataset.contactId,btn.dataset.crmStage);
+    } finally {
+      if (btn.isConnected) {
+        btn.disabled=false;
+        btn.textContent=old;
+      }
+    }
+  }));
 }
 
 function linkedinTaskAction(task) {
@@ -711,6 +799,7 @@ function linkedinTaskAction(task) {
 
 async function runLinkedInAction(contactId,action) {
   const labels = {
+    comment_sent:"Comentario registrado",
     invite_sent:"Invitación registrada",
     accepted:"Conexión registrada",
     first_dm_sent:"DM registrado",
@@ -727,6 +816,7 @@ async function runLinkedInAction(contactId,action) {
     await loadLinkedIn();
     if ($("#view-contacts")?.classList.contains("active-view")) await loadContacts();
     if ($("#view-pipeline")?.classList.contains("active-view")) await loadPipeline();
+    if ($("#detail-dialog")?.open) await openContact(contactId);
     return labels[action] || "Actualizado";
   } catch(error) {
     alert(error.message || "No pudimos registrar la acción.");
