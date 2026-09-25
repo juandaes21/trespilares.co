@@ -136,10 +136,21 @@ export async function ensureCrmSchema(pool) {
       topic TEXT,
       pillar TEXT,
       cta TEXT,
+      format TEXT,
+      hook TEXT,
+      content_body TEXT,
+      goal TEXT,
+      scheduled_at TIMESTAMPTZ,
       status TEXT NOT NULL DEFAULT 'draft',
       tracking_code TEXT NOT NULL UNIQUE,
       created_by UUID REFERENCES crm_users(id)
     );
+
+    ALTER TABLE crm_content_assets ADD COLUMN IF NOT EXISTS format TEXT;
+    ALTER TABLE crm_content_assets ADD COLUMN IF NOT EXISTS hook TEXT;
+    ALTER TABLE crm_content_assets ADD COLUMN IF NOT EXISTS content_body TEXT;
+    ALTER TABLE crm_content_assets ADD COLUMN IF NOT EXISTS goal TEXT;
+    ALTER TABLE crm_content_assets ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ;
 
     CREATE TABLE IF NOT EXISTS crm_contacts (
       id UUID PRIMARY KEY,
@@ -1892,8 +1903,8 @@ export function createCrmRouter({ pool }) {
     try {
       await pool.query(
         `INSERT INTO crm_content_assets(
-          id,platform,profile,title,url,published_at,topic,pillar,cta,status,tracking_code,created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          id,platform,profile,title,url,published_at,topic,pillar,cta,format,hook,content_body,goal,scheduled_at,status,tracking_code,created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
         [
           id,
           cleanText(req.body?.platform || "linkedin",40),
@@ -1904,7 +1915,12 @@ export function createCrmRouter({ pool }) {
           cleanNullable(req.body?.topic,180),
           cleanNullable(req.body?.pillar,80),
           cleanNullable(req.body?.cta,300),
-          cleanText(req.body?.status || "draft",30),
+          cleanNullable(req.body?.format,80),
+          cleanNullable(req.body?.hook,500),
+          cleanNullable(req.body?.contentBody,8000),
+          cleanNullable(req.body?.goal,160),
+          req.body?.scheduledAt || null,
+          cleanText(req.body?.status || "idea",30),
           trackingCode,
           req.crmUser.id
         ]
@@ -1929,6 +1945,11 @@ export function createCrmRouter({ pool }) {
       topic:"topic",
       pillar:"pillar",
       cta:"cta",
+      format:"format",
+      hook:"hook",
+      contentBody:"content_body",
+      goal:"goal",
+      scheduledAt:"scheduled_at",
       status:"status"
     };
     const sets = [];
@@ -1936,8 +1957,8 @@ export function createCrmRouter({ pool }) {
     for (const [input,column] of Object.entries(allowed)) {
       if (Object.prototype.hasOwnProperty.call(req.body || {},input)) {
         let value = req.body[input];
-        if (input === "publishedAt") value = value || null;
-        else value = cleanNullable(value,input === "url" ? 800 : 300);
+        if (input === "publishedAt" || input === "scheduledAt") value = value || null;
+        else value = cleanNullable(value,input === "url" ? 800 : input === "contentBody" ? 8000 : input === "hook" ? 500 : 300);
         params.push(value);
         sets.push(column + "=$" + params.length);
       }
