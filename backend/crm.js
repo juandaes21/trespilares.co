@@ -19,6 +19,16 @@ export const CRM_STAGES = [
 ];
 
 const STAGE_SET = new Set(CRM_STAGES);
+const STAGE_INDEX = new Map(CRM_STAGES.map((stage,index)=>[stage,index]));
+const LINKEDIN_STALE_DAYS = Math.max(3, Math.min(60, Number(process.env.CRM_LINKEDIN_STALE_DAYS || 14)));
+const LINKEDIN_DAILY_TARGET = Math.max(1, Math.min(50, Number(process.env.CRM_LINKEDIN_DAILY_TARGET || 5)));
+
+function forwardStage(current,target) {
+  const currentIndex = STAGE_INDEX.get(current);
+  const targetIndex = STAGE_INDEX.get(target);
+  if (currentIndex == null || targetIndex == null) return target;
+  return currentIndex >= targetIndex ? current : target;
+}
 const TASK_TYPES = new Set([
   "linkedin_comment",
   "linkedin_connect",
@@ -169,7 +179,17 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS scored_at TIMESTAMPTZ;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS first_touch JSONB NOT NULL DEFAULT '{}'::jsonb;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS last_touch JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_invited_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_connected_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_first_dm_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_1_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_2_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_last_reply_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_last_action_at TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS crm_contacts_score_idx ON crm_contacts(target_score DESC) WHERE archived = FALSE;
+    CREATE INDEX IF NOT EXISTS crm_contacts_linkedin_invited_idx
+      ON crm_contacts(linkedin_invited_at)
+      WHERE archived = FALSE AND linkedin_invited_at IS NOT NULL;
     CREATE INDEX IF NOT EXISTS crm_contacts_stage_idx ON crm_contacts(stage) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_owner_idx ON crm_contacts(owner_user_id) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_next_action_idx ON crm_contacts(next_action_at) WHERE archived = FALSE;
@@ -1211,38 +1231,283 @@ export function createCrmRouter({ pool }) {
 
   router.get("/linkedin/today", auth, async (_req, res) => {
     try {
-      const tasks = await pool.query(
-        `SELECT t.*,c.name AS contact_name,c.company,c.title AS contact_title,
-                  c.linkedin_url,c.stage,c.signal,u.name AS assigned_name
-             FROM crm_tasks t
-             JOIN crm_contacts c ON c.id=t.contact_id
-             LEFT JOIN crm_users u ON u.id=t.assigned_user_id
-            WHERE t.status='open'
-              AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
-              AND t.due_at<NOW()+INTERVAL '1 day'
-            ORDER BY t.due_at ASC
-            LIMIT 50`
-      );
-      const prospects = await pool.query(
-        `SELECT c.*,u.name AS owner_name
-             FROM crm_contacts c
-             LEFT JOIN crm_users u ON u.id=c.owner_user_id
-            WHERE c.archived=FALSE
-              AND c.source_channel='linkedin'
-              AND c.stage IN ('target','engaged','connected','conversation','need_identified')
-              AND NOT EXISTS (
-                SELECT 1 FROM crm_tasks t
-                 WHERE t.contact_id=c.id
-                   AND t.status='open'
-                   AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
-              )
-            ORDER BY c.target_score DESC NULLS LAST, COALESCE(c.next_action_at,c.updated_at) ASC
-            LIMIT 15`
-      );
-      res.json({ ok:true, tasks:tasks.rows, prospects:prospects.rows });
+      const [tasks,prospects,stats] = await Promise.all([
+        pool.query(
+          `SELECT t.*,c.name AS contact_name,c.company,c.title AS contact_title,
+                    c.linkedin_url,c.stage,c.signal,u.name AS assigned_name,
+                    c.linkedin_invited_at,c.linkedin_connected_at,c.linkedin_first_dm_at,
+                    c.linkedin_followup_1_at,c.linkedin_followup_2_at,c.linkedin_last_reply_at
+               FROM crm_tasks t
+               JOIN crm_contacts c ON c.id=t.contact_id
+               LEFT JOIN crm_users u ON u.id=t.assigned_user_id
+              WHERE t.status='open'
+                AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
+                AND t.due_at<NOW()+INTERVAL '1 day'
+              ORDER BY t.due_at ASC
+              LIMIT 50`
+        ),
+        pool.query(
+          `SELECT c.*,u.name AS owner_name,
+                    CASE
+                      WHEN c.linkedin_invited_at IS NOT NULL AND c.linkedin_connected_at IS NULL
+                      THEN FLOOR(EXTRACT(EPOCH FROM (NOW()-c.linkedin_invited_at))/86400)::int
+                      ELSE NULL
+                    END AS linkedin_pending_days
+               FROM crm_contacts c
+               LEFT JOIN crm_users u ON u.id=c.owner_user_id
+              WHERE c.archived=FALSE
+                AND c.source_channel='linkedin'
+                AND c.stage IN ('target','engaged','connected','conversation','need_identified')
+                AND NOT EXISTS (
+                  SELECT 1 FROM crm_tasks t
+                   WHERE t.contact_id=c.id
+                     AND t.status='open'
+                     AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
+                )
+              ORDER BY c.target_score DESC NULLS LAST, COALESCE(c.next_action_at,c.updated_at) ASC
+              LIMIT 20`
+        ),
+        pool.query(
+          `SELECT
+              COUNT(*) FILTER (WHERE stage='target')::int AS targets,
+              COUNT(*) FILTER (
+                WHERE linkedin_invited_at IS NOT NULL
+                  AND linkedin_connected_at IS NULL
+                  AND stage='engaged'
+              )::int AS pending,
+              COUNT(*) FILTER (WHERE linkedin_connected_at IS NOT NULL)::int AS connected,
+              COUNT(*) FILTER (
+                WHERE stage IN ('conversation','need_identified','meeting_proposed','booked','showed','diagnostic','proposal','won')
+              )::int AS conversations_or_beyond,
+              COUNT(*) FILTER (
+                WHERE linkedin_invited_at >= CURRENT_DATE
+              )::int AS invites_today,
+              COUNT(*) FILTER (
+                WHERE linkedin_invited_at IS NOT NULL
+                  AND linkedin_connected_at IS NULL
+                  AND linkedin_invited_at < NOW() - ($1::int * INTERVAL '1 day')
+              )::int AS stale_pending,
+              CASE
+                WHEN COUNT(*) FILTER (WHERE linkedin_invited_at IS NOT NULL) = 0 THEN 0
+                ELSE ROUND(
+                  100.0 * COUNT(*) FILTER (WHERE linkedin_connected_at IS NOT NULL)
+                  / COUNT(*) FILTER (WHERE linkedin_invited_at IS NOT NULL),
+                  1
+                )
+              END AS acceptance_rate
+            FROM crm_contacts
+           WHERE archived=FALSE AND source_channel='linkedin'`,
+          [LINKEDIN_STALE_DAYS]
+        )
+      ]);
+      res.json({
+        ok:true,
+        tasks:tasks.rows,
+        prospects:prospects.rows,
+        stats:stats.rows[0] || {},
+        policy:{ staleDays:LINKEDIN_STALE_DAYS, dailyTarget:LINKEDIN_DAILY_TARGET }
+      });
     } catch (error) {
       console.error("crm_linkedin_today_failed", error);
       res.status(500).json({ ok:false, error:"No pudimos cargar la prospección." });
+    }
+  });
+
+  router.post("/linkedin/contacts/:id/action", auth, writeAccess, async (req, res) => {
+    const action = cleanText(req.body?.action, 40);
+    const allowed = new Set([
+      "invite_sent",
+      "accepted",
+      "first_dm_sent",
+      "followup_1_sent",
+      "followup_2_sent",
+      "reply_received",
+      "close_outreach"
+    ]);
+    if (!allowed.has(action)) {
+      return res.status(400).json({ ok:false, error:"Acción de LinkedIn no válida." });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT * FROM crm_contacts
+          WHERE id=$1 AND archived=FALSE
+          FOR UPDATE`,
+        [req.params.id]
+      );
+      if (!result.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ ok:false, error:"Contacto no encontrado." });
+      }
+
+      const contact = result.rows[0];
+      let stage = contact.stage;
+      let summary = "";
+      let direction = "internal";
+      let timestampColumn = null;
+      let timestampAlreadySet = false;
+      let nextTask = null;
+      let completeTypes = [];
+
+      if (action === "invite_sent") {
+        stage = forwardStage(stage,"engaged");
+        summary = "Invitación de conexión enviada en LinkedIn";
+        direction = "outbound";
+        timestampColumn = "linkedin_invited_at";
+        timestampAlreadySet = Boolean(contact.linkedin_invited_at);
+        completeTypes = ["linkedin_connect"];
+        nextTask = {
+          type:"linkedin_followup",
+          title:"Revisar aceptación en LinkedIn",
+          dueSql:"NOW()+INTERVAL '3 days'",
+          notes:"Revisar si aceptó. Si sigue pendiente, no enviar mensajes adicionales."
+        };
+      } else if (action === "accepted") {
+        stage = forwardStage(stage,"connected");
+        summary = "Invitación de LinkedIn aceptada";
+        direction = "inbound";
+        timestampColumn = "linkedin_connected_at";
+        timestampAlreadySet = Boolean(contact.linkedin_connected_at);
+        completeTypes = ["linkedin_followup","linkedin_connect"];
+        nextTask = {
+          type:"linkedin_dm",
+          title:"Enviar primer mensaje por LinkedIn",
+          dueSql:"NOW()+INTERVAL '1 day'",
+          notes:"Retomar el hook específico de la invitación. Mantenerlo breve, aportar algo útil y hacer un ask pequeño. Sin link de calendario en el primer DM."
+        };
+      } else if (action === "first_dm_sent") {
+        summary = "Primer DM enviado por LinkedIn";
+        direction = "outbound";
+        timestampColumn = "linkedin_first_dm_at";
+        timestampAlreadySet = Boolean(contact.linkedin_first_dm_at);
+        completeTypes = ["linkedin_dm"];
+        nextTask = {
+          type:"linkedin_followup",
+          title:"Follow-up LinkedIn #1",
+          dueSql:"NOW()+INTERVAL '4 days'",
+          notes:"Agregar valor o contexto nuevo. Evitar mensajes tipo “solo haciendo seguimiento”."
+        };
+      } else if (action === "followup_1_sent") {
+        summary = "Primer follow-up enviado por LinkedIn";
+        direction = "outbound";
+        timestampColumn = "linkedin_followup_1_at";
+        timestampAlreadySet = Boolean(contact.linkedin_followup_1_at);
+        completeTypes = ["linkedin_followup"];
+        nextTask = {
+          type:"linkedin_followup",
+          title:"Follow-up LinkedIn #2 · cierre",
+          dueSql:"GREATEST(COALESCE(linkedin_first_dm_at,NOW())+INTERVAL '10 days',NOW()+INTERVAL '1 day')",
+          notes:"Cerrar el loop con baja presión. Después de este intento, detener la secuencia si no hay respuesta."
+        };
+      } else if (action === "followup_2_sent") {
+        summary = "Segundo y último follow-up enviado por LinkedIn";
+        direction = "outbound";
+        timestampColumn = "linkedin_followup_2_at";
+        timestampAlreadySet = Boolean(contact.linkedin_followup_2_at);
+        completeTypes = ["linkedin_followup"];
+        if (STAGE_INDEX.get(stage) <= STAGE_INDEX.get("connected")) stage = "nurture";
+      } else if (action === "reply_received") {
+        stage = forwardStage(stage,"conversation");
+        summary = "Respuesta recibida por LinkedIn";
+        direction = "inbound";
+        timestampColumn = "linkedin_last_reply_at";
+        completeTypes = ["linkedin_dm","linkedin_followup"];
+      } else if (action === "close_outreach") {
+        summary = "Secuencia de LinkedIn cerrada sin respuesta";
+        completeTypes = ["linkedin_connect","linkedin_dm","linkedin_followup"];
+        if (STAGE_INDEX.get(stage) <= STAGE_INDEX.get("connected")) stage = "nurture";
+      }
+
+      const updateSets = ["stage=$2","linkedin_last_action_at=NOW()","last_contact_at=NOW()","updated_at=NOW()"];
+      if (timestampColumn) updateSets.push(timestampColumn + "=COALESCE(" + timestampColumn + ",NOW())");
+      await client.query(
+        "UPDATE crm_contacts SET " + updateSets.join(",") + " WHERE id=$1",
+        [req.params.id,stage]
+      );
+
+      if (completeTypes.length) {
+        await client.query(
+          `UPDATE crm_tasks
+              SET status='done',completed_at=NOW(),updated_at=NOW()
+            WHERE contact_id=$1
+              AND status='open'
+              AND type = ANY($2::text[])`,
+          [req.params.id,completeTypes]
+        );
+      }
+
+      if (nextTask && !timestampAlreadySet) {
+        const exists = await client.query(
+          `SELECT 1 FROM crm_tasks
+            WHERE contact_id=$1 AND status='open' AND type=$2 AND title=$3
+            LIMIT 1`,
+          [req.params.id,nextTask.type,nextTask.title]
+        );
+        if (!exists.rowCount) {
+          const due = await client.query(
+            "SELECT " + nextTask.dueSql + " AS due_at"
+          );
+          await client.query(
+            `INSERT INTO crm_tasks(
+              id,contact_id,type,title,notes,due_at,priority,assigned_user_id,created_by
+            ) VALUES ($1,$2,$3,$4,$5,$6,'normal',$7,$8)`,
+            [
+              crypto.randomUUID(),
+              req.params.id,
+              nextTask.type,
+              nextTask.title,
+              nextTask.notes,
+              due.rows[0].due_at,
+              contact.owner_user_id || req.crmUser.id,
+              req.crmUser.id
+            ]
+          );
+        }
+      }
+
+      if (!timestampAlreadySet || action === "reply_received" || action === "close_outreach") {
+        await client.query(
+          `INSERT INTO crm_activities(
+            id,contact_id,type,direction,summary,created_by,metadata
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+          [
+            crypto.randomUUID(),
+            req.params.id,
+            action === "invite_sent" || action === "accepted" ? "linkedin_connection" : "linkedin_dm",
+            direction,
+            summary,
+            req.crmUser.id,
+            JSON.stringify({ linkedinAction:action })
+          ]
+        );
+      }
+
+      if (stage !== contact.stage) {
+        await client.query(
+          `INSERT INTO crm_activities(
+            id,contact_id,type,direction,summary,created_by,metadata
+          ) VALUES ($1,$2,'stage_change','internal',$3,$4,$5::jsonb)`,
+          [
+            crypto.randomUUID(),
+            req.params.id,
+            "Etapa actualizada a " + stage,
+            req.crmUser.id,
+            JSON.stringify({ stage,source:"linkedin_os" })
+          ]
+        );
+      }
+
+      await audit(client, req.crmUser.id, "linkedin_action", "contact", req.params.id, { action,stage });
+      await client.query("COMMIT");
+      res.json({ ok:true, stage });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(()=>{});
+      console.error("crm_linkedin_action_failed", error);
+      res.status(500).json({ ok:false, error:"No pudimos registrar la acción de LinkedIn." });
+    } finally {
+      client.release();
     }
   });
 
