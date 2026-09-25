@@ -752,6 +752,7 @@ function bindLinkedInActions(root=document) {
 
 function renderLinkedIn() {
   const tasks=state.linkedin?.tasks||[];
+  const upcoming=state.linkedin?.upcoming||[];
   const prospects=state.linkedin?.prospects||[];
   const stats=state.linkedin?.stats||{};
   const policy=state.linkedin?.policy||{};
@@ -777,7 +778,19 @@ function renderLinkedIn() {
     '</div>';
   }).join("") : empty("No tienes acciones de LinkedIn pendientes hoy.");
 
-  $("#linkedin-prospects").innerHTML=prospects.length ? prospects.map(contact=>{
+  $("#linkedin-upcoming").innerHTML=upcoming.length ? upcoming.map(task=>{
+    const primary=linkedinTaskAction(task);
+    return '<div class="stack-item">'+
+      '<span class="stack-icon">in</span>'+
+      '<div class="stack-main"><strong>'+esc(task.title)+'</strong><small>'+esc(task.contact_name)+(task.company?' · '+esc(task.company):'')+' · '+fmtDate(task.due_at)+'</small></div>'+
+      '<div class="stack-actions">'+
+        (task.linkedin_url?'<a class="stack-action" href="'+esc(task.linkedin_url)+'" target="_blank" rel="noopener">Abrir</a>':'')+
+        (primary?'<button class="stack-action" data-linkedin-action="'+primary.action+'" data-contact-id="'+task.contact_id+'">'+esc(primary.label)+'</button>':'')+
+      '</div>'+
+    '</div>';
+  }).join("") : empty("No hay acciones futuras programadas.");
+
+  $("#linkedin-uncovered").innerHTML=prospects.length ? prospects.map(contact=>{
     const primary=linkedinNextAction(contact);
     const pending=contact.linkedin_pending_days!=null ? " · "+contact.linkedin_pending_days+"d pendiente" : "";
     return '<div class="stack-item">'+
@@ -786,11 +799,10 @@ function renderLinkedIn() {
       '<div class="stack-actions">'+
         (contact.linkedin_url?'<a class="stack-action" href="'+esc(contact.linkedin_url)+'" target="_blank" rel="noopener">Abrir</a>':'')+
         (primary?'<button class="stack-action emphasis" data-linkedin-action="'+primary.action+'" data-contact-id="'+contact.id+'">'+esc(primary.label)+'</button>':'')+
-        (contact.stage==="connected"?'<button class="stack-action" data-linkedin-action="reply_received" data-contact-id="'+contact.id+'">Respondió</button>':'')+
         '<button class="stack-action" data-new-task-contact="'+contact.id+'">+ Acción</button>'+
       '</div>'+
     '</div>';
-  }).join("") : empty("Todos los prospectos tienen una próxima acción.");
+  }).join("") : empty("Todos los prospectos tienen seguimiento programado.");
 
   bindTaskActions($("#linkedin-tasks"));
   bindLinkedInActions($("#view-linkedin"));
