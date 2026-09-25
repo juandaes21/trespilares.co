@@ -235,6 +235,8 @@ function renderDashboard(data,tasks) {
   }).join("") || empty("Aún no hay datos.");
 
   $("#dashboard-tasks").innerHTML=(tasks.length ? tasks.slice(0,6).map(task=>taskStack(task)).join("") : empty("No tienes acciones pendientes hoy."));
+  bindTaskActions($("#dashboard-tasks"));
+  bindLinkedInActions($("#dashboard-tasks"));
 
   const sourceMax=max((data.sources||[]).map(x=>x.count));
   $("#dashboard-sources").innerHTML=(data.sources||[]).length
@@ -471,10 +473,14 @@ async function loadTasks() {
 }
 
 function taskStack(task) {
+  const action=task.type?.startsWith("linkedin") ? linkedinTaskAction(task) : null;
   return '<div class="stack-item">'+
     '<span class="stack-icon">'+(task.type?.startsWith("linkedin")?"in":"✓")+'</span>'+
     '<div class="stack-main"><strong>'+esc(task.title)+'</strong><small>'+esc(task.contact_name||"Sin contacto")+' · '+fmtDate(task.due_at)+'</small></div>'+
-    '<button class="stack-action" data-complete-task="'+task.id+'">Hecho</button>'+
+    '<div class="stack-actions">'+
+      (task.linkedin_url?'<a class="stack-action" href="'+esc(task.linkedin_url)+'" target="_blank" rel="noopener">Abrir</a>':'')+
+      (action?'<button class="stack-action emphasis" data-linkedin-action="'+action.action+'" data-contact-id="'+esc(task.contact_id||"")+'">'+esc(action.label)+'</button>':'<button class="stack-action" data-complete-task="'+task.id+'">Hecho</button>')+
+    '</div>'+
   '</div>';
 }
 
@@ -558,6 +564,43 @@ async function loadLinkedIn() {
   } catch(error){
     $("#linkedin-tasks").innerHTML=empty(error.message);
   }
+}
+
+function firstName(name="") {
+  return String(name).trim().split(/\s+/)[0] || "";
+}
+
+function compactSignal(signal="", max=120) {
+  const clean=String(signal||"").replace(/\s+/g," ").trim();
+  if (!clean) return "";
+  return clean.length<=max ? clean : clean.slice(0,max-1).trim()+"…";
+}
+
+function buildLinkedInDrafts(contact) {
+  const name=firstName(contact?.name);
+  const company=String(contact?.company||"").trim();
+  const title=String(contact?.title||"").trim();
+  const signal=compactSignal(contact?.signal||"",105);
+  const who=[title,company].filter(Boolean).join(" en ");
+  const reference=signal ? "Vi "+signal.charAt(0).toLowerCase()+signal.slice(1) : (who ? "Me llamó la atención tu trabajo como "+who : "Me pareció interesante tu perfil");
+
+  let invite=(name ? "Hola "+name+", " : "")+reference+". Trabajo en finanzas y planificación patrimonial. Me gustaría conectar.";
+  if (invite.length>200) {
+    invite=(name ? "Hola "+name+", " : "")+reference+". También trabajo en finanzas y negocios. Me gustaría conectar.";
+  }
+  if (invite.length>200) invite=invite.slice(0,197).trim()+"...";
+
+  const firstDm=(name ? "Gracias por conectar, "+name+". " : "")+
+    (signal ? "Me quedó sonando el punto sobre "+signal.toLowerCase()+". " : "Me llamó la atención tu trayectoria"+(company?" en "+company:"")+". ")+
+    "Desde finanzas y construcción de patrimonio sigo mucho cómo profesionales y empresarios ordenan decisiones que suelen quedar aisladas. ¿En qué estás más enfocado actualmente?";
+
+  const follow1=(name ? name+", " : "")+
+    "retomando esto, una cosa que vemos mucho es que inversión, liquidez y protección terminan tratándose por separado. Cuando se ordenan por objetivos y horizonte, cambia bastante la conversación. ¿Eso hoy lo tienes estructurado o todavía está disperso?";
+
+  const follow2=(name ? name+", " : "")+
+    "cierro el loop por aquí para no llenarte de mensajes. Si más adelante te sirve contrastar cómo estás ordenando protección, capital y objetivos de largo plazo, con gusto conversamos. Un abrazo.";
+
+  return { invite,firstDm,follow1,follow2 };
 }
 
 function linkedinNextAction(item) {
