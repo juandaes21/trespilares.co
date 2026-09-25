@@ -324,6 +324,12 @@ function renderContactDetail(data) {
   const appointments=(data.appointments||[]).length
     ? data.appointments.map(a=>'<div class="stack-item"><span class="stack-icon">◷</span><div class="stack-main"><strong>'+esc(a.topic||"Reunión Tres Pilares")+'</strong><small>'+fmtDate(a.start_time)+' · '+esc(a.assigned_member_name||"")+'</small></div></div>').join("")
     : empty("No hay reuniones asociadas.");
+  const generatedDrafts=buildLinkedInDrafts(c);
+  const inviteDraft=c.linkedin_invite_note || generatedDrafts.invite;
+  const firstDmDraft=c.linkedin_first_dm_draft || generatedDrafts.firstDm;
+  const follow1Draft=c.linkedin_followup_1_draft || generatedDrafts.follow1;
+  const follow2Draft=c.linkedin_followup_2_draft || generatedDrafts.follow2;
+  const linkedinPrimary=linkedinNextAction(c);
 
   return '<div class="detail-grid">'+
     '<div class="detail-card">'+
@@ -353,6 +359,29 @@ function renderContactDetail(data) {
       '<div class="modal-actions"><button class="btn ghost" id="archive-contact">Archivar</button><button class="btn primary" id="save-contact">Guardar cambios</button></div>'+
     '</div>'+
     '<div style="display:grid;gap:18px">'+
+      (c.source_channel==="linkedin"?'<div class="detail-card linkedin-message-center">'+
+        '<div class="panel-head"><div><span class="eyebrow">LINKEDIN</span><h3>Centro de mensajes</h3></div>'+
+          '<div class="stack-actions">'+
+            (c.linkedin_url?'<a class="stack-action" href="'+esc(c.linkedin_url)+'" target="_blank" rel="noopener">Abrir perfil</a>':'')+
+            (linkedinPrimary?'<button class="stack-action emphasis" type="button" data-linkedin-action="'+linkedinPrimary.action+'" data-contact-id="'+c.id+'">'+esc(linkedinPrimary.label)+'</button>':'')+
+            (c.stage==="connected"?'<button class="stack-action" type="button" data-linkedin-action="reply_received" data-contact-id="'+c.id+'">Respondió</button>':'')+
+          '</div>'+
+        '</div>'+
+        '<p class="draft-note">Borradores base construidos solo con el contexto guardado en CRM. Revísalos antes de enviar; no inventan datos ni usan una API paga.</p>'+
+        '<div class="draft-block"><div class="draft-head"><strong>Nota de conexión</strong><small id="invite-count">'+inviteDraft.length+'/200</small></div>'+
+          '<textarea id="linkedin-invite-draft" rows="3" maxlength="200">'+esc(inviteDraft)+'</textarea>'+
+          '<button class="text-action" type="button" data-copy-draft="linkedin-invite-draft">Copiar nota</button></div>'+
+        '<div class="draft-block"><div class="draft-head"><strong>Primer DM</strong></div>'+
+          '<textarea id="linkedin-first-dm-draft" rows="5">'+esc(firstDmDraft)+'</textarea>'+
+          '<button class="text-action" type="button" data-copy-draft="linkedin-first-dm-draft">Copiar DM</button></div>'+
+        '<div class="draft-block"><div class="draft-head"><strong>Follow-up #1</strong><small>+4 días</small></div>'+
+          '<textarea id="linkedin-followup-1-draft" rows="4">'+esc(follow1Draft)+'</textarea>'+
+          '<button class="text-action" type="button" data-copy-draft="linkedin-followup-1-draft">Copiar</button></div>'+
+        '<div class="draft-block"><div class="draft-head"><strong>Follow-up #2</strong><small>cierre</small></div>'+
+          '<textarea id="linkedin-followup-2-draft" rows="4">'+esc(follow2Draft)+'</textarea>'+
+          '<button class="text-action" type="button" data-copy-draft="linkedin-followup-2-draft">Copiar</button></div>'+
+        '<div class="modal-actions draft-actions"><button class="btn ghost" type="button" id="regenerate-linkedin-drafts">Regenerar base</button><button class="btn primary" type="button" id="save-linkedin-drafts">Guardar borradores</button></div>'+
+      '</div>':'')+
       '<div class="detail-card"><h3>Registrar interacción</h3><form id="activity-form" class="form-grid">'+
         '<label>Tipo<select name="type"><option value="linkedin_dm">DM LinkedIn</option><option value="linkedin_comment">Comentario LinkedIn</option><option value="linkedin_connection">Conexión LinkedIn</option><option value="whatsapp">WhatsApp</option><option value="email">Email</option><option value="call">Llamada</option><option value="meeting">Reunión</option><option value="note">Nota</option></select></label>'+
         '<label>Resumen<textarea name="summary" rows="2" required></textarea></label>'+
@@ -389,6 +418,55 @@ function bindContactDetail(data) {
       await loadContacts();
     } catch(error){ alert(error.message); }
   });
+
+  const inviteTextarea=$("#linkedin-invite-draft");
+  inviteTextarea?.addEventListener("input",()=>{
+    const counter=$("#invite-count");
+    if(counter) counter.textContent=inviteTextarea.value.length+"/200";
+  });
+
+  $("[data-copy-draft]").forEach(btn=>btn.addEventListener("click",async()=>{
+    const field=$("#"+btn.dataset.copyDraft);
+    if(!field) return;
+    await navigator.clipboard.writeText(field.value);
+    const old=btn.textContent;
+    btn.textContent="Copiado";
+    setTimeout(()=>{ if(btn.isConnected) btn.textContent=old; },1200);
+  }));
+
+  $("#regenerate-linkedin-drafts")?.addEventListener("click",()=>{
+    const drafts=buildLinkedInDrafts(data.contact);
+    const fields=[
+      ["#linkedin-invite-draft",drafts.invite],
+      ["#linkedin-first-dm-draft",drafts.firstDm],
+      ["#linkedin-followup-1-draft",drafts.follow1],
+      ["#linkedin-followup-2-draft",drafts.follow2]
+    ];
+    fields.forEach(([selector,value])=>{ const el=$(selector); if(el) el.value=value; });
+    if($("#invite-count")) $("#invite-count").textContent=drafts.invite.length+"/200";
+  });
+
+  $("#save-linkedin-drafts")?.addEventListener("click",async()=>{
+    try {
+      await api("/contacts/"+id,{
+        method:"PATCH",
+        body:{
+          linkedinInviteNote:$("#linkedin-invite-draft")?.value || "",
+          linkedinFirstDmDraft:$("#linkedin-first-dm-draft")?.value || "",
+          linkedinFollowup1Draft:$("#linkedin-followup-1-draft")?.value || "",
+          linkedinFollowup2Draft:$("#linkedin-followup-2-draft")?.value || ""
+        }
+      });
+      const btn=$("#save-linkedin-drafts");
+      if(btn){
+        const old=btn.textContent;
+        btn.textContent="Guardado";
+        setTimeout(()=>{ if(btn.isConnected) btn.textContent=old; },1200);
+      }
+    } catch(error){ alert(error.message); }
+  });
+
+  bindLinkedInActions($("#detail-body"));
 
   $("#activity-form")?.addEventListener("submit",async(event)=>{
     event.preventDefault();
@@ -485,16 +563,20 @@ function taskStack(task) {
 }
 
 function renderTasks() {
-  $("#tasks-list").innerHTML=state.tasks.length ? state.tasks.map(task=>
-    '<div class="task-row">'+
-      '<button class="task-check '+(task.status==="done"?"done":"")+'" data-complete-task="'+task.id+'">'+(task.status==="done"?"✓":"")+'</button>'+
+  $("#tasks-list").innerHTML=state.tasks.length ? state.tasks.map(task=>{
+    const action=task.type?.startsWith("linkedin") ? linkedinTaskAction(task) : null;
+    return '<div class="task-row">'+
+      (action
+        ? '<button class="task-check" data-linkedin-action="'+action.action+'" data-contact-id="'+esc(task.contact_id||"")+'" title="'+esc(action.label)+'">in</button>'
+        : '<button class="task-check '+(task.status==="done"?"done":"")+'" data-complete-task="'+task.id+'">'+(task.status==="done"?"✓":"")+'</button>')+
       '<div><strong>'+esc(task.title)+'</strong><small>'+esc(task.contact_name||"Sin contacto")+(task.company?' · '+esc(task.company):'')+'</small></div>'+
       '<div class="task-meta-hide"><small>Tipo</small><strong>'+esc(task.type)+'</strong></div>'+
       '<div class="task-meta-hide"><small>Cuándo</small><strong>'+fmtDate(task.due_at)+'</strong></div>'+
       '<button class="text-action" data-open-contact="'+esc(task.contact_id||"")+'">Abrir</button>'+
-    '</div>'
-  ).join("") : empty("No hay tareas en esta vista.");
+    '</div>';
+  }).join("") : empty("No hay tareas en esta vista.");
   bindTaskActions($("#tasks-list"));
+  bindLinkedInActions($("#tasks-list"));
 }
 
 function bindTaskActions(root=document) {
