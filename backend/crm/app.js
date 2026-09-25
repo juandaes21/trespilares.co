@@ -425,7 +425,7 @@ function bindContactDetail(data) {
     if(counter) counter.textContent=inviteTextarea.value.length+"/200";
   });
 
-  $("[data-copy-draft]").forEach(btn=>btn.addEventListener("click",async()=>{
+  $$("[data-copy-draft]").forEach(btn=>btn.addEventListener("click",async()=>{
     const field=$("#"+btn.dataset.copyDraft);
     if(!field) return;
     await navigator.clipboard.writeText(field.value);
@@ -735,7 +735,7 @@ async function runLinkedInAction(contactId,action) {
 }
 
 function bindLinkedInActions(root=document) {
-  $("[data-linkedin-action]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$("[data-linkedin-action]",root).forEach(btn=>btn.addEventListener("click",async()=>{
     const old=btn.textContent;
     btn.disabled=true;
     btn.textContent="Guardando…";
@@ -794,7 +794,7 @@ function renderLinkedIn() {
 
   bindTaskActions($("#linkedin-tasks"));
   bindLinkedInActions($("#view-linkedin"));
-  $("[data-new-task-contact]").forEach(btn=>btn.addEventListener("click",()=>openTaskDialog(btn.dataset.newTaskContact)));
+  $$("[data-new-task-contact]").forEach(btn=>btn.addEventListener("click",()=>openTaskDialog(btn.dataset.newTaskContact)));
 }
 
 async function loadContent() {
@@ -882,7 +882,7 @@ function renderTeam() {
     '</div>';
   }).join("") : empty("No hay usuarios.");
 
-  $("[data-toggle-user]",target).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$("[data-toggle-user]",target).forEach(btn=>btn.addEventListener("click",async()=>{
     const user=state.users.find(item=>item.id===btn.dataset.toggleUser);
     if(!user) return;
 
