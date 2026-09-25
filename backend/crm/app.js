@@ -336,6 +336,10 @@ function renderContactDetail(data) {
         '<div class="fact"><small>Criterio</small><strong>'+esc(c.score_reason||"—")+'</strong></div>'+
         '<div class="fact"><small>Último contacto</small><strong>'+esc(c.last_contact_at?fmtDate(c.last_contact_at):"—")+'</strong></div>'+
         '<div class="fact"><small>Próxima acción</small><strong>'+esc(c.next_action_at?fmtDate(c.next_action_at):"—")+'</strong></div>'+
+        (c.source_channel==="linkedin"?'<div class="fact"><small>Invitación LinkedIn</small><strong>'+esc(c.linkedin_invited_at?fmtDate(c.linkedin_invited_at):"—")+'</strong></div>':'')+
+        (c.source_channel==="linkedin"?'<div class="fact"><small>Conexión LinkedIn</small><strong>'+esc(c.linkedin_connected_at?fmtDate(c.linkedin_connected_at):"—")+'</strong></div>':'')+
+        (c.source_channel==="linkedin"?'<div class="fact"><small>Primer DM</small><strong>'+esc(c.linkedin_first_dm_at?fmtDate(c.linkedin_first_dm_at):"—")+'</strong></div>':'')+
+        (c.source_channel==="linkedin"?'<div class="fact"><small>Última respuesta</small><strong>'+esc(c.linkedin_last_reply_at?fmtDate(c.linkedin_last_reply_at):"—")+'</strong></div>':'')+
       '</div>'+
       '<hr style="border:0;border-top:1px solid #eee8df;margin:18px 0">'+
       '<div class="form-grid two">'+
@@ -556,29 +560,116 @@ async function loadLinkedIn() {
   }
 }
 
+function linkedinNextAction(item) {
+  if (!item) return null;
+  if (item.stage === "target") return { action:"invite_sent",label:"Invitación enviada" };
+  if (item.stage === "engaged") return { action:"accepted",label:"Aceptó" };
+  if (item.stage === "connected") {
+    if (!item.linkedin_first_dm_at) return { action:"first_dm_sent",label:"DM enviado" };
+    if (!item.linkedin_followup_1_at) return { action:"followup_1_sent",label:"Follow-up #1" };
+    if (!item.linkedin_followup_2_at) return { action:"followup_2_sent",label:"Follow-up #2" };
+  }
+  return null;
+}
+
+function linkedinTaskAction(task) {
+  if (task.type === "linkedin_connect") return { action:"invite_sent",label:"Invitación enviada" };
+  if (task.type === "linkedin_dm") return { action:"first_dm_sent",label:"DM enviado" };
+  if (task.type === "linkedin_followup" && task.stage === "engaged") return { action:"accepted",label:"Aceptó" };
+  if (task.type === "linkedin_followup" && task.stage === "connected") {
+    return task.linkedin_followup_1_at
+      ? { action:"followup_2_sent",label:"Follow-up #2 enviado" }
+      : { action:"followup_1_sent",label:"Follow-up #1 enviado" };
+  }
+  return null;
+}
+
+async function runLinkedInAction(contactId,action) {
+  const labels = {
+    invite_sent:"Invitación registrada",
+    accepted:"Conexión registrada",
+    first_dm_sent:"DM registrado",
+    followup_1_sent:"Follow-up registrado",
+    followup_2_sent:"Secuencia cerrada",
+    reply_received:"Respuesta registrada",
+    close_outreach:"Prospecto enviado a nurture"
+  };
+  try {
+    await api("/linkedin/contacts/"+contactId+"/action",{
+      method:"POST",
+      body:{ action }
+    });
+    await loadLinkedIn();
+    if ($("#view-contacts")?.classList.contains("active-view")) await loadContacts();
+    if ($("#view-pipeline")?.classList.contains("active-view")) await loadPipeline();
+    return labels[action] || "Actualizado";
+  } catch(error) {
+    alert(error.message || "No pudimos registrar la acción.");
+    throw error;
+  }
+}
+
+function bindLinkedInActions(root=document) {
+  $("[data-linkedin-action]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+    const old=btn.textContent;
+    btn.disabled=true;
+    btn.textContent="Guardando…";
+    try {
+      await runLinkedInAction(btn.dataset.contactId,btn.dataset.linkedinAction);
+    } finally {
+      if (btn.isConnected) {
+        btn.disabled=false;
+        btn.textContent=old;
+      }
+    }
+  }));
+}
+
 function renderLinkedIn() {
   const tasks=state.linkedin?.tasks||[];
   const prospects=state.linkedin?.prospects||[];
+  const stats=state.linkedin?.stats||{};
+  const policy=state.linkedin?.policy||{};
 
-  $("#linkedin-tasks").innerHTML=tasks.length ? tasks.map(task=>
-    '<div class="stack-item">'+
+  if ($("#linkedin-invites-today")) $("#linkedin-invites-today").textContent=Number(stats.invites_today||0)+"/"+Number(policy.dailyTarget||5);
+  if ($("#linkedin-pending")) $("#linkedin-pending").textContent=Number(stats.pending||0);
+  if ($("#linkedin-stale")) $("#linkedin-stale").textContent=Number(stats.stale_pending||0)+" con más de "+Number(policy.staleDays||14)+" días";
+  if ($("#linkedin-acceptance")) $("#linkedin-acceptance").textContent=Number(stats.acceptance_rate||0).toFixed(1).replace(".0","")+"%";
+  if ($("#linkedin-conversations")) $("#linkedin-conversations").textContent=Number(stats.conversations_or_beyond||0);
+
+  $("#linkedin-tasks").innerHTML=tasks.length ? tasks.map(task=>{
+    const primary=linkedinTaskAction(task);
+    const canReply=task.stage==="connected" && ["linkedin_dm","linkedin_followup"].includes(task.type);
+    return '<div class="stack-item">'+
       '<span class="stack-icon">in</span>'+
       '<div class="stack-main"><strong>'+esc(task.title)+'</strong><small>'+esc(task.contact_name)+(task.company?' · '+esc(task.company):'')+' · '+fmtDate(task.due_at)+'</small></div>'+
-      (task.linkedin_url?'<a class="stack-action" href="'+esc(task.linkedin_url)+'" target="_blank" rel="noopener">LinkedIn</a>':'')+
-      '<button class="stack-action" data-complete-task="'+task.id+'">Hecho</button>'+
-    '</div>'
-  ).join("") : empty("No tienes acciones de LinkedIn pendientes hoy.");
+      '<div class="stack-actions">'+
+        (task.linkedin_url?'<a class="stack-action" href="'+esc(task.linkedin_url)+'" target="_blank" rel="noopener">Abrir</a>':'')+
+        (primary?'<button class="stack-action" data-linkedin-action="'+primary.action+'" data-contact-id="'+task.contact_id+'">'+esc(primary.label)+'</button>':'')+
+        (canReply?'<button class="stack-action emphasis" data-linkedin-action="reply_received" data-contact-id="'+task.contact_id+'">Respondió</button>':'')+
+        '<button class="stack-action" data-complete-task="'+task.id+'">Hecho</button>'+
+      '</div>'+
+    '</div>';
+  }).join("") : empty("No tienes acciones de LinkedIn pendientes hoy.");
 
-  $("#linkedin-prospects").innerHTML=prospects.length ? prospects.map(c=>
-    '<div class="stack-item">'+
-      '<span class="stack-icon">'+initials(c.name)+'</span>'+
-      '<div class="stack-main"><strong>'+esc(c.name)+(c.target_score!=null?' · Score '+esc(c.target_score):'')+'</strong><small>'+esc([c.title,c.company,c.signal].filter(Boolean).join(" · "))+'</small></div>'+
-      '<button class="stack-action" data-new-task-contact="'+c.id+'">+ Acción</button>'+
-    '</div>'
-  ).join("") : empty("Todos los prospectos tienen una próxima acción.");
+  $("#linkedin-prospects").innerHTML=prospects.length ? prospects.map(contact=>{
+    const primary=linkedinNextAction(contact);
+    const pending=contact.linkedin_pending_days!=null ? " · "+contact.linkedin_pending_days+"d pendiente" : "";
+    return '<div class="stack-item">'+
+      '<span class="stack-icon">'+initials(contact.name)+'</span>'+
+      '<div class="stack-main"><strong>'+esc(contact.name)+(contact.target_score!=null?' · Score '+esc(contact.target_score):'')+'</strong><small>'+esc([contact.title,contact.company,contact.signal].filter(Boolean).join(" · "))+esc(pending)+'</small></div>'+
+      '<div class="stack-actions">'+
+        (contact.linkedin_url?'<a class="stack-action" href="'+esc(contact.linkedin_url)+'" target="_blank" rel="noopener">Abrir</a>':'')+
+        (primary?'<button class="stack-action emphasis" data-linkedin-action="'+primary.action+'" data-contact-id="'+contact.id+'">'+esc(primary.label)+'</button>':'')+
+        (contact.stage==="connected"?'<button class="stack-action" data-linkedin-action="reply_received" data-contact-id="'+contact.id+'">Respondió</button>':'')+
+        '<button class="stack-action" data-new-task-contact="'+contact.id+'">+ Acción</button>'+
+      '</div>'+
+    '</div>';
+  }).join("") : empty("Todos los prospectos tienen una próxima acción.");
 
   bindTaskActions($("#linkedin-tasks"));
-  $$("[data-new-task-contact]").forEach(btn=>btn.addEventListener("click",()=>openTaskDialog(btn.dataset.newTaskContact)));
+  bindLinkedInActions($("#view-linkedin"));
+  $("[data-new-task-contact]").forEach(btn=>btn.addEventListener("click",()=>openTaskDialog(btn.dataset.newTaskContact)));
 }
 
 async function loadContent() {
