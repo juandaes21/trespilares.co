@@ -238,3 +238,13 @@ tbody tr:hover{background:#fcfaf7}
   .top-actions{width:100%}
   .top-actions .btn{flex:1}
 }
+.linkedin-message-center{display:grid;gap:14px}
+.linkedin-message-center .panel-head{align-items:flex-start}
+.draft-note{margin:0;color:var(--muted);font-size:.76rem;line-height:1.55}
+.draft-block{display:grid;gap:7px;padding:12px;border:1px solid #ece6dc;border-radius:13px;background:#fcfaf6}
+.draft-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.draft-head strong{font-size:.79rem;color:var(--green-deep)}
+.draft-head small{font-size:.68rem;color:var(--muted)}
+.draft-block textarea{width:100%;resize:vertical}
+.draft-block .text-action{justify-self:start}
+.draft-actions{margin-top:0}
