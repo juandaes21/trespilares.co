@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
   <title>Tres Pilares CRM</title>
-  <link rel="stylesheet" href="/crm/styles.css?v=20260925-ai2">
+  <link rel="stylesheet" href="/crm/styles.css?v=20260925-content1">
 </head>
 <body>
   <div id="auth-shell" class="auth-shell">
@@ -201,13 +201,53 @@
       </section>
 
       <section id="view-content" class="view">
-        <div class="toolbar">
+        <div class="toolbar content-toolbar">
           <div class="toolbar-copy">
-            <p>Registra las piezas que publicamos y mide cuáles producen contactos y reuniones.</p>
+            <span class="eyebrow">SISTEMA EDITORIAL</span>
+            <h2>Contenido que construye autoridad y conversación</h2>
+            <p>Planea, produce, publica y mide las piezas de Tres Pilares y las marcas personales desde un solo lugar.</p>
           </div>
-          <button class="btn primary" id="new-content-btn">+ Registrar contenido</button>
+          <button class="btn primary" id="new-content-btn">+ Nueva pieza</button>
         </div>
-        <div id="content-grid" class="content-grid"></div>
+
+        <div id="content-metrics" class="metric-grid content-metrics"></div>
+
+        <div class="content-controls">
+          <div class="segmented content-status-filter" id="content-status-filter">
+            <button class="active" data-content-status="all">Todo</button>
+            <button data-content-status="idea">Ideas</button>
+            <button data-content-status="draft">En producción</button>
+            <button data-content-status="ready">Listo</button>
+            <button data-content-status="scheduled">Programado</button>
+            <button data-content-status="published">Publicado</button>
+          </div>
+          <div class="content-filter-row">
+            <select id="content-profile-filter">
+              <option value="">Todos los perfiles</option>
+              <option>Juan David</option>
+              <option>Carolina</option>
+              <option>Giovanna</option>
+              <option>Tres Pilares</option>
+            </select>
+            <select id="content-format-filter">
+              <option value="">Todos los formatos</option>
+              <option value="reel">Reel / TikTok / Short</option>
+              <option value="carousel">Carrusel</option>
+              <option value="post">Post texto</option>
+              <option value="document">Documento LinkedIn</option>
+              <option value="story">Story</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="content-board" class="content-board"></div>
+
+        <article class="panel content-performance-panel">
+          <div class="panel-head">
+            <div><span class="eyebrow">ATRIBUCIÓN</span><h2>Qué contenido está moviendo relaciones</h2></div>
+          </div>
+          <div id="content-performance" class="content-performance"></div>
+        </article>
       </section>
 
       <section id="view-team" class="view">
@@ -285,27 +325,33 @@
     </form>
   </dialog>
 
-  <dialog id="content-dialog" class="modal">
+  <dialog id="content-dialog" class="modal wide-modal">
     <form method="dialog" class="modal-card" id="content-form">
       <div class="modal-head">
-        <div><span class="eyebrow">ATRIBUCIÓN</span><h2>Registrar contenido</h2></div>
+        <div><span class="eyebrow">SISTEMA EDITORIAL</span><h2>Nueva pieza de contenido</h2></div>
         <button class="icon-btn" value="cancel" aria-label="Cerrar">×</button>
       </div>
-      <div class="form-grid">
+      <div class="form-grid two">
         <label>Perfil<select name="profile" required><option>Juan David</option><option>Carolina</option><option>Giovanna</option><option>Tres Pilares</option></select></label>
-        <label>Título<input name="title" required></label>
-        <label>URL<input name="url" type="url"></label>
+        <label>Plataforma<select name="platform"><option value="linkedin">LinkedIn</option><option value="instagram">Instagram</option><option value="tiktok">TikTok</option><option value="youtube">YouTube Shorts</option></select></label>
+        <label>Formato<select name="format"><option value="reel">Reel / TikTok / Short</option><option value="carousel">Carrusel</option><option value="post">Post texto</option><option value="document">Documento LinkedIn</option><option value="story">Story</option></select></label>
+        <label>Estado<select name="status"><option value="idea">Idea</option><option value="draft">En producción</option><option value="ready">Listo</option><option value="scheduled">Programado</option><option value="published">Publicado</option></select></label>
+        <label class="span-2">Título interno<input name="title" required placeholder="Una frase para identificar la pieza"></label>
+        <label class="span-2">Hook / apertura<textarea name="hook" rows="2" placeholder="La primera frase que debe detener el scroll"></textarea></label>
         <label>Pilar<select name="pillar"><option value="">—</option><option>Protege</option><option>Construye</option><option>Proyecta</option><option>Decisiones reales</option><option>Criterio financiero</option><option>Plan a Tres</option></select></label>
-        <label>Tema<input name="topic"></label>
-        <label>CTA<input name="cta" placeholder="Comenta PLAN / agenda / guardar…"></label>
-        <label>Estado<select name="status"><option value="draft">Borrador</option><option value="published">Publicado</option></select></label>
-        <label>Fecha publicación<input name="publishedAt" type="datetime-local"></label>
+        <label>Tema<input name="topic" placeholder="Ej. liquidez, retiro, patrimonio, mercados"></label>
+        <label>Objetivo<input name="goal" placeholder="Educar / autoridad / conversación / conversión"></label>
+        <label>CTA<input name="cta" placeholder="Comenta PLAN / guarda / DM / agenda…"></label>
+        <label class="span-2">Guion / copy / estructura<textarea name="contentBody" rows="8" placeholder="Desarrolla aquí el guion, carrusel o copy completo"></textarea></label>
+        <label>Fecha programada<input name="scheduledAt" type="datetime-local"></label>
+        <label>Fecha publicada<input name="publishedAt" type="datetime-local"></label>
+        <label class="span-2">URL publicada<input name="url" type="url" placeholder="https://..."></label>
       </div>
-      <div class="modal-actions"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn primary" type="submit" value="default">Registrar</button></div>
+      <div class="modal-actions"><button class="btn ghost" value="cancel">Cancelar</button><button class="btn primary" type="submit" value="default">Guardar pieza</button></div>
       <p id="content-message" class="form-message"></p>
     </form>
   </dialog>
 
-  <script src="/crm/app.js?v=20260925-ai2" defer></script>
+  <script src="/crm/app.js?v=20260925-content1" defer></script>
 </body>
 </html>
