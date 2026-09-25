@@ -226,7 +226,7 @@ function renderDashboard(data,tasks,linkedin={}) {
     { label:"Tareas vencidas",value:Number(data.tasks?.overdue||0),sub:"Requieren atención",go:"tasks",tone:Number(data.tasks?.overdue||0)>0?"warning":"" }
   ];
   $("#dashboard-cards").innerHTML=cards.map(card=>
-    '<button class="metric-card metric-card-button '+esc(card.tone)+'" type="button" data-go="'+esc(card.go)+'">'+
+    '<button class="metric-card metric-card-button '+esc(card.tone)+'" type="button" data-dashboard-go="'+esc(card.go)+'">'+
       '<small>'+esc(card.label)+'</small><strong>'+card.value+'</strong><em>'+esc(card.sub)+'</em>'+
       '<span class="metric-arrow">→</span>'+
     '</button>'
