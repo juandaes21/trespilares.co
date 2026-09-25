@@ -878,9 +878,11 @@ export function createCrmRouter({ pool }) {
                     GROUP BY COALESCE(u.name,'Sin asignar')
                     ORDER BY count DESC`),
         pool.query(`SELECT
-          COUNT(*) FILTER (WHERE status='open' AND due_at<NOW())::int AS overdue,
-          COUNT(*) FILTER (WHERE status='open' AND due_at>=NOW() AND due_at<NOW()+INTERVAL '1 day')::int AS due_today
-          FROM crm_tasks`),
+          COUNT(*) FILTER (WHERE t.status='open' AND t.due_at<NOW())::int AS overdue,
+          COUNT(*) FILTER (WHERE t.status='open' AND t.due_at>=NOW() AND t.due_at<NOW()+INTERVAL '1 day')::int AS due_today
+          FROM crm_tasks t
+          LEFT JOIN crm_contacts c ON c.id=t.contact_id
+          WHERE c.id IS NULL OR c.archived=FALSE`),
         pool.query(`SELECT
           COUNT(*) FILTER (WHERE status<>'cancelled' AND start_time>=NOW() AND start_time<NOW()+INTERVAL '7 days')::int AS upcoming,
           COUNT(*) FILTER (WHERE status<>'cancelled' AND start_time>=date_trunc('month',NOW()) AND start_time<date_trunc('month',NOW())+INTERVAL '1 month')::int AS month
@@ -1215,7 +1217,7 @@ export function createCrmRouter({ pool }) {
   router.get("/tasks", auth, async (req, res) => {
     const scope = cleanText(req.query.scope || "open", 30);
     const params = [];
-    const where = [];
+    const where = ["(c.id IS NULL OR c.archived=FALSE)"];
     if (scope !== "all") where.push("t.status='open'");
     if (scope === "today") where.push("t.due_at<NOW()+INTERVAL '1 day'");
     if (scope === "overdue") where.push("t.due_at<NOW()");
@@ -1309,6 +1311,7 @@ export function createCrmRouter({ pool }) {
                JOIN crm_contacts c ON c.id=t.contact_id
                LEFT JOIN crm_users u ON u.id=t.assigned_user_id
               WHERE t.status='open'
+                AND c.archived=FALSE
                 AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
                 AND t.due_at<NOW()+INTERVAL '1 day'
               ORDER BY t.due_at ASC
@@ -1323,6 +1326,7 @@ export function createCrmRouter({ pool }) {
                JOIN crm_contacts c ON c.id=t.contact_id
                LEFT JOIN crm_users u ON u.id=t.assigned_user_id
               WHERE t.status='open'
+                AND c.archived=FALSE
                 AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
                 AND t.due_at>=NOW()+INTERVAL '1 day'
               ORDER BY t.due_at ASC
