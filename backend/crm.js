@@ -265,14 +265,30 @@ export async function importCrmTargetsFromEnv(pool) {
     const scoreReason = cleanNullable(target?.scoreReason, 2000);
     const scoreVersion = cleanNullable(target?.scoreVersion || "TP-LI-v1", 80);
 
+    const company = cleanText(target?.company,160);
     const existing = contactIdInput
       ? await pool.query(
           "SELECT id FROM crm_contacts WHERE id::text=$1 AND archived=FALSE LIMIT 1",
           [contactIdInput]
         )
       : await pool.query(
-          "SELECT id FROM crm_contacts WHERE linkedin_url=$1 AND archived=FALSE LIMIT 1",
-          [linkedinUrl]
+          `SELECT id
+             FROM crm_contacts
+            WHERE archived=FALSE
+              AND (
+                linkedin_url=$1
+                OR (
+                  LOWER(name)=LOWER($2)
+                  AND (
+                    NULLIF($3,'') IS NULL
+                    OR company IS NULL
+                    OR LOWER(company)=LOWER($3)
+                  )
+                )
+              )
+            ORDER BY target_score DESC NULLS LAST, created_at ASC
+            LIMIT 1`,
+          [linkedinUrl,name,company]
         );
 
     let contactId;
@@ -359,6 +375,38 @@ export async function importCrmTargetsFromEnv(pool) {
         ]
       );
       imported += 1;
+    }
+
+    if (!contactIdInput && name) {
+      const duplicates = await pool.query(
+        `SELECT id
+           FROM crm_contacts
+          WHERE archived=FALSE
+            AND id<>$1
+            AND LOWER(name)=LOWER($2)
+            AND (
+              NULLIF($3,'') IS NULL
+              OR company IS NULL
+              OR LOWER(company)=LOWER($3)
+            )`,
+        [contactId,name,company]
+      );
+      for (const duplicate of duplicates.rows) {
+        await pool.query(
+          "UPDATE crm_contacts SET archived=TRUE,updated_at=NOW() WHERE id=$1",
+          [duplicate.id]
+        );
+        await pool.query(
+          `INSERT INTO crm_audit_log(id,user_id,action,entity_type,entity_id,metadata)
+           VALUES ($1,$2,'archive_duplicate','contact',$3,$4::jsonb)`,
+          [
+            crypto.randomUUID(),
+            ownerId,
+            duplicate.id,
+            JSON.stringify({ canonicalContactId:contactId, source:"linkedin_target_import" })
+          ]
+        );
+      }
     }
 
     const completeTasks = Array.isArray(target?.completeTasks) ? target.completeTasks.slice(0, 20) : [];
