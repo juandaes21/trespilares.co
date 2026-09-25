@@ -294,11 +294,11 @@ export async function importCrmTargetsFromEnv(pool) {
                 END,
                 signal=COALESCE(NULLIF($10,''),signal),
                 notes=COALESCE(NULLIF($11,''),notes),
-                target_score=$12,
-                score_breakdown=$13::jsonb,
-                score_reason=$14,
-                score_version=$15,
-                scored_at=NOW(),
+                target_score=COALESCE($12,target_score),
+                score_breakdown=CASE WHEN $12 IS NULL THEN score_breakdown ELSE $13::jsonb END,
+                score_reason=COALESCE($14,score_reason),
+                score_version=COALESCE($15,score_version),
+                scored_at=CASE WHEN $12 IS NULL THEN scored_at ELSE NOW() END,
                 updated_at=NOW()
           WHERE id=$1`,
         [
