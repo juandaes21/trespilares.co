@@ -243,7 +243,7 @@ function renderDashboard(data,tasks,linkedin={}) {
   if ($("#linkedin-acceptance")) $("#linkedin-acceptance").textContent=Number(liStats.acceptance_rate||0).toFixed(1).replace(".0","")+"%";
   if ($("#linkedin-conversations")) $("#linkedin-conversations").textContent=Number(liStats.conversations_or_beyond||0);
 
-  $("[data-go]",$("#view-dashboard")).forEach(btn=>btn.addEventListener("click",()=>showView(btn.dataset.go)));
+  $$("[data-go]",$("#view-dashboard")).forEach(btn=>btn.addEventListener("click",()=>showView(btn.dataset.go)));
 
   const funnelStages = ["connected","conversation","need_identified","booked","diagnostic","proposal","won"];
   const maxCount=max(funnelStages.map(k=>counts[k]||0));
@@ -845,7 +845,7 @@ async function runCrmStageAction(contactId,stage) {
 }
 
 function bindCrmStageActions(root=document) {
-  $("[data-crm-stage]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$("[data-crm-stage]",root).forEach(btn=>btn.addEventListener("click",async()=>{
     const old=btn.textContent;
     btn.disabled=true;
     btn.textContent="Guardando…";
