@@ -269,3 +269,39 @@ tbody tr:hover{background:#fcfaf7}
 
 .stage-message-hint{padding:14px 15px;border:1px solid #e7dfd2;border-radius:13px;background:#f8f5ef;color:var(--green-deep);font-size:.78rem;line-height:1.55}
 .stage-draft textarea{min-height:116px}
+
+.dashboard-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:2px 0 12px}
+.dashboard-section-head h2{font-size:1.35rem;margin-top:3px}
+.dashboard-primary-metrics{margin-bottom:16px}
+.metric-card-button{position:relative;width:100%;text-align:left;font:inherit;cursor:pointer;transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.metric-card-button:hover{transform:translateY(-2px);border-color:#d7c8b4;box-shadow:0 12px 32px rgba(11,46,38,.07)}
+.metric-card-button .metric-arrow{position:absolute;right:17px;top:16px;color:#b3a792;font-size:.9rem}
+.metric-card-button.focus{border-color:#d8c8aa;background:linear-gradient(180deg,#fff,#fdfaf4)}
+.metric-card-button.warning{border-color:#e4c8bc;background:#fffaf8}
+.metric-card-button.warning strong{color:#934d39}
+.metric-card-button.positive{border-color:#cfe0d7;background:#fbfdfc}
+.linkedin-strip{display:grid;grid-template-columns:185px minmax(0,1fr);gap:20px;align-items:stretch;background:var(--green-deep);color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:20px;box-shadow:0 8px 30px rgba(11,46,38,.07)}
+.linkedin-strip-head{display:flex;flex-direction:column;justify-content:space-between;gap:10px;padding-right:18px;border-right:1px solid rgba(255,255,255,.12)}
+.linkedin-strip-head .eyebrow{color:var(--gold-light)}
+.linkedin-strip-head strong{font-family:Georgia,"Times New Roman",serif;font-size:1.15rem;font-weight:500}
+.linkedin-strip-head .text-action{padding:0;text-align:left;color:#d8e8e0}
+.linkedin-strip-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.linkedin-strip-metrics>div{padding:5px 12px}
+.linkedin-strip-metrics small,.linkedin-strip-metrics strong,.linkedin-strip-metrics em{display:block}
+.linkedin-strip-metrics small{font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;color:#a9c2b8;font-weight:800}
+.linkedin-strip-metrics strong{font-family:Georgia,"Times New Roman",serif;font-size:1.45rem;font-weight:500;color:#fff;margin-top:4px}
+.linkedin-strip-metrics em{font-style:normal;font-size:.66rem;color:#a9c2b8;margin-top:2px}
+.dashboard-main-grid .panel{min-height:330px}
+@media(max-width:1100px){
+  .linkedin-strip{grid-template-columns:1fr}
+  .linkedin-strip-head{border-right:0;border-bottom:1px solid rgba(255,255,255,.12);padding:0 0 12px;flex-direction:row;align-items:end}
+  .linkedin-strip-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:820px){
+  .linkedin-strip-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:560px){
+  .dashboard-section-head{align-items:flex-start}
+  .linkedin-strip-metrics{grid-template-columns:1fr 1fr}
+  .linkedin-strip-metrics>div{padding:5px 6px}
+}
