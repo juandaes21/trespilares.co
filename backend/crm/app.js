@@ -476,7 +476,7 @@ function bindContactDetail(data) {
     try {
       await api("/linkedin/contacts/"+id+"/regenerate-drafts",{
         method:"POST",
-        body:{}
+        body:{ postContext:$("#detail-signal")?.value || "" }
       });
       await openContact(id);
     } catch(error) {
