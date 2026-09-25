@@ -52,6 +52,21 @@ function cleanNullable(value, max = 500) {
   return valueClean || null;
 }
 
+function cleanAttributionTouch(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const touch = {
+    source: cleanText(value.source, 80).toLowerCase(),
+    medium: cleanText(value.medium, 80).toLowerCase(),
+    campaign: cleanText(value.campaign, 120),
+    content: cleanText(value.content, 180),
+    term: cleanText(value.term, 180),
+    referrer: cleanText(value.referrer, 800),
+    landingUrl: cleanText(value.landingUrl, 800),
+    capturedAt: cleanText(value.capturedAt, 80)
+  };
+  return Object.fromEntries(Object.entries(touch).filter(([,v]) => v));
+}
+
 function normalizeEmail(value) {
   return cleanText(value, 200).toLowerCase();
 }
@@ -152,6 +167,8 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_reason TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_version TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS scored_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS first_touch JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS last_touch JSONB NOT NULL DEFAULT '{}'::jsonb;
     CREATE INDEX IF NOT EXISTS crm_contacts_score_idx ON crm_contacts(target_score DESC) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_stage_idx ON crm_contacts(stage) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_owner_idx ON crm_contacts(owner_user_id) WHERE archived = FALSE;
@@ -531,6 +548,12 @@ export async function syncAppointmentToCrm(client, data) {
     ownerId = owner.rows[0]?.id || null;
   }
 
+  const firstTouch = cleanAttributionTouch(data.firstTouch);
+  const lastTouch = cleanAttributionTouch(data.lastTouch);
+  const sourceChannel = firstTouch.source || data.utmSource || data.source || "website";
+  const sourceProfile = firstTouch.campaign || data.utmCampaign || null;
+  const sourceDetail = firstTouch.content || data.utmContent || null;
+
   const existing = await client.query(
     `SELECT id,stage FROM crm_contacts
       WHERE archived = FALSE
@@ -542,10 +565,6 @@ export async function syncAppointmentToCrm(client, data) {
       LIMIT 1`,
     [data.email || "", data.phone || ""]
   );
-
-  const sourceChannel = data.utmSource || data.source || "website";
-  const sourceProfile = data.utmCampaign || null;
-  const sourceDetail = data.utmContent || null;
 
   if (existing.rowCount) {
     const id = existing.rows[0].id;
@@ -559,6 +578,14 @@ export async function syncAppointmentToCrm(client, data) {
               source_profile = COALESCE(source_profile, $7),
               source_detail = COALESCE(source_detail, $8),
               source_content_id = COALESCE(source_content_id, $9),
+              first_touch = CASE
+                WHEN first_touch IS NULL OR first_touch = '{}'::jsonb THEN $10::jsonb
+                ELSE first_touch
+              END,
+              last_touch = CASE
+                WHEN $11::jsonb = '{}'::jsonb THEN last_touch
+                ELSE $11::jsonb
+              END,
               stage = CASE
                 WHEN stage IN ('target','engaged','connected','conversation','need_identified','meeting_proposed')
                   THEN 'booked'
@@ -567,7 +594,19 @@ export async function syncAppointmentToCrm(client, data) {
               last_contact_at = NOW(),
               updated_at = NOW()
         WHERE id = $1`,
-      [id, data.name, data.email, data.phone, ownerId, sourceChannel, sourceProfile, sourceDetail, contentId]
+      [
+        id,
+        data.name,
+        data.email,
+        data.phone,
+        ownerId,
+        sourceChannel,
+        sourceProfile,
+        sourceDetail,
+        contentId,
+        JSON.stringify(firstTouch),
+        JSON.stringify(lastTouch)
+      ]
     );
     await client.query(
       `INSERT INTO crm_activities(id,contact_id,type,direction,summary,metadata)
@@ -576,7 +615,12 @@ export async function syncAppointmentToCrm(client, data) {
         crypto.randomUUID(),
         id,
         "Cita agendada desde " + sourceChannel,
-        JSON.stringify({ appointmentId:data.appointmentId, topic:data.topic })
+        JSON.stringify({
+          appointmentId:data.appointmentId,
+          topic:data.topic,
+          firstTouch,
+          lastTouch
+        })
       ]
     );
     return id;
@@ -586,8 +630,8 @@ export async function syncAppointmentToCrm(client, data) {
   await client.query(
     `INSERT INTO crm_contacts(
       id,name,email,phone,owner_user_id,source_channel,source_profile,source_detail,source_content_id,
-      stage,interest_pillar,signal,last_contact_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'booked',$10,$11,NOW())`,
+      stage,interest_pillar,signal,last_contact_at,first_touch,last_touch
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'booked',$10,$11,NOW(),$12::jsonb,$13::jsonb)`,
     [
       id,
       data.name,
@@ -599,7 +643,9 @@ export async function syncAppointmentToCrm(client, data) {
       sourceDetail,
       contentId,
       data.topic || null,
-      "Agendó una conversación inicial"
+      "Agendó una conversación inicial",
+      JSON.stringify(firstTouch),
+      JSON.stringify(lastTouch)
     ]
   );
   await client.query(
@@ -609,7 +655,12 @@ export async function syncAppointmentToCrm(client, data) {
       crypto.randomUUID(),
       id,
       "Cita agendada desde " + sourceChannel,
-      JSON.stringify({ appointmentId:data.appointmentId, topic:data.topic })
+      JSON.stringify({
+        appointmentId:data.appointmentId,
+        topic:data.topic,
+        firstTouch,
+        lastTouch
+      })
     ]
   );
   return id;
