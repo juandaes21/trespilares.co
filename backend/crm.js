@@ -250,6 +250,57 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS utm_content TEXT;
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS referrer TEXT;
   `);
+
+  // Recover LinkedIn milestone timestamps from existing audited activities without inventing dates.
+  await pool.query(`
+    WITH x AS (
+      SELECT contact_id, MIN(occurred_at) AS occurred_at
+      FROM crm_activities
+      WHERE type='linkedin_connection' AND direction='outbound'
+      GROUP BY contact_id
+    )
+    UPDATE crm_contacts c
+       SET linkedin_invited_at=x.occurred_at
+      FROM x
+     WHERE c.id=x.contact_id AND c.linkedin_invited_at IS NULL
+  `);
+  await pool.query(`
+    WITH x AS (
+      SELECT contact_id, MIN(occurred_at) AS occurred_at
+      FROM crm_activities
+      WHERE type='linkedin_connection' AND direction='inbound'
+      GROUP BY contact_id
+    )
+    UPDATE crm_contacts c
+       SET linkedin_connected_at=x.occurred_at
+      FROM x
+     WHERE c.id=x.contact_id AND c.linkedin_connected_at IS NULL
+  `);
+  await pool.query(`
+    WITH x AS (
+      SELECT contact_id, MIN(occurred_at) AS occurred_at
+      FROM crm_activities
+      WHERE type='linkedin_dm' AND direction='outbound'
+      GROUP BY contact_id
+    )
+    UPDATE crm_contacts c
+       SET linkedin_first_dm_at=x.occurred_at
+      FROM x
+     WHERE c.id=x.contact_id AND c.linkedin_first_dm_at IS NULL
+  `);
+  await pool.query(`
+    WITH x AS (
+      SELECT contact_id, MAX(occurred_at) AS occurred_at
+      FROM crm_activities
+      WHERE type='linkedin_dm' AND direction='inbound'
+      GROUP BY contact_id
+    )
+    UPDATE crm_contacts c
+       SET linkedin_last_reply_at=x.occurred_at
+      FROM x
+     WHERE c.id=x.contact_id
+       AND (c.linkedin_last_reply_at IS NULL OR x.occurred_at>c.linkedin_last_reply_at)
+  `);
 }
 
 export async function importCrmTargetsFromEnv(pool) {
