@@ -186,6 +186,10 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_2_at TIMESTAMPTZ;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_last_reply_at TIMESTAMPTZ;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_last_action_at TIMESTAMPTZ;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_invite_note TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_first_dm_draft TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_1_draft TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_2_draft TEXT;
     CREATE INDEX IF NOT EXISTS crm_contacts_score_idx ON crm_contacts(target_score DESC) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_linkedin_invited_idx
       ON crm_contacts(linkedin_invited_at)
@@ -1023,7 +1027,11 @@ export function createCrmRouter({ pool }) {
       notes:"notes",
       scoreReason:"score_reason",
       scoreVersion:"score_version",
-      nextActionAt:"next_action_at"
+      nextActionAt:"next_action_at",
+      linkedinInviteNote:"linkedin_invite_note",
+      linkedinFirstDmDraft:"linkedin_first_dm_draft",
+      linkedinFollowup1Draft:"linkedin_followup_1_draft",
+      linkedinFollowup2Draft:"linkedin_followup_2_draft"
     };
     const sets = [];
     const params = [];
@@ -1032,7 +1040,16 @@ export function createCrmRouter({ pool }) {
         let value = req.body[input];
         if (input === "email") value = cleanNullable(value,200)?.toLowerCase() || null;
         else if (input === "nextActionAt") value = value || null;
-        else value = cleanNullable(value, input === "notes" ? 4000 : 1500);
+        else {
+          const longFields = new Set([
+            "notes",
+            "linkedinInviteNote",
+            "linkedinFirstDmDraft",
+            "linkedinFollowup1Draft",
+            "linkedinFollowup2Draft"
+          ]);
+          value = cleanNullable(value, longFields.has(input) ? 4000 : 1500);
+        }
         params.push(value);
         sets.push(column + "=$" + params.length);
       }
