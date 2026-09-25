@@ -33,7 +33,7 @@ const state = {
 };
 
 const $ = (selector, root=document) => root?.querySelector(selector) || null;
-const $ = (selector, root=document) => root ? [...root.querySelectorAll(selector)] : [];
+const $$ = (selector, root=document) => root ? [...root.querySelectorAll(selector)] : [];
 const stageLabel = (stage) => STAGES.find(([key]) => key === stage)?.[1] || stage || "—";
 const fmtDate = (value, opts={}) => {
   if (!value) return "—";
