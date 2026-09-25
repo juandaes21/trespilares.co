@@ -429,7 +429,12 @@ export async function importCrmTargetsFromEnv(pool) {
           scoreReason,
           scoreVersion,
           normalizeEmail(target?.email || ""),
-          cleanText(target?.linkedinUrl,500)
+          cleanText(target?.linkedinUrl,500),
+          cleanText(target?.linkedinInviteNote,4000),
+          cleanText(target?.linkedinFirstDmDraft,4000),
+          cleanText(target?.linkedinFollowup1Draft,4000),
+          cleanText(target?.linkedinFollowup2Draft,4000),
+          cleanText(target?.linkedinCommentDraft,4000)
         ]
       );
       updated += 1;
@@ -439,8 +444,10 @@ export async function importCrmTargetsFromEnv(pool) {
       await pool.query(
         `INSERT INTO crm_contacts(
           id,name,company,title,linkedin_url,segment,owner_user_id,source_channel,source_profile,
-          source_detail,stage,signal,notes,target_score,score_breakdown,score_reason,score_version,scored_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,NOW())`,
+          source_detail,stage,signal,notes,target_score,score_breakdown,score_reason,score_version,
+          linkedin_invite_note,linkedin_first_dm_draft,linkedin_followup_1_draft,
+          linkedin_followup_2_draft,linkedin_comment_draft,scored_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,NOW())`,
         [
           contactId,
           name,
@@ -457,7 +464,12 @@ export async function importCrmTargetsFromEnv(pool) {
           score,
           JSON.stringify(breakdown),
           scoreReason,
-          scoreVersion
+          scoreVersion,
+          cleanNullable(target?.linkedinInviteNote,4000),
+          cleanNullable(target?.linkedinFirstDmDraft,4000),
+          cleanNullable(target?.linkedinFollowup1Draft,4000),
+          cleanNullable(target?.linkedinFollowup2Draft,4000),
+          cleanNullable(target?.linkedinCommentDraft,4000)
         ]
       );
       await pool.query(
