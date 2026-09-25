@@ -407,6 +407,8 @@ export async function importCrmTargetsFromEnv(pool) {
                 score_breakdown=CASE WHEN $12 IS NULL THEN score_breakdown ELSE $13::jsonb END,
                 score_reason=COALESCE($14,score_reason),
                 score_version=COALESCE($15,score_version),
+                email=COALESCE(NULLIF($16,''),email),
+                linkedin_url=COALESCE(NULLIF($17,''),linkedin_url),
                 scored_at=CASE WHEN $12 IS NULL THEN scored_at ELSE NOW() END,
                 updated_at=NOW()
           WHERE id=$1`,
@@ -425,7 +427,9 @@ export async function importCrmTargetsFromEnv(pool) {
           score,
           JSON.stringify(breakdown),
           scoreReason,
-          scoreVersion
+          scoreVersion,
+          normalizeEmail(target?.email || ""),
+          cleanText(target?.linkedinUrl,500)
         ]
       );
       updated += 1;
