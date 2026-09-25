@@ -248,3 +248,21 @@ tbody tr:hover{background:#fcfaf7}
 .draft-block textarea{width:100%;resize:vertical}
 .draft-block .text-action{justify-self:start}
 .draft-actions{margin-top:0}
+
+.interaction-card{display:grid;gap:14px}
+.interaction-card .panel-head{align-items:center}
+.interaction-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.interaction-btn{border:1px solid #ded6ca;background:#fff;color:var(--green-deep);border-radius:12px;padding:12px 10px;font-size:.78rem;font-weight:800;cursor:pointer;text-align:center;transition:.15s ease}
+.interaction-btn:hover{border-color:#bba985;background:#fcfaf6;transform:translateY(-1px)}
+.interaction-btn:disabled{opacity:.55;cursor:default;transform:none}
+.interaction-btn.primary{background:var(--green);border-color:var(--green);color:#fff}
+.interaction-btn.primary:hover{background:var(--green-deep)}
+.interaction-btn.success{background:#edf4f0;border-color:#c9ddd4;color:var(--green-deep)}
+.manual-interaction{border-top:1px solid #eee8df;padding-top:11px}
+.manual-interaction summary{cursor:pointer;color:var(--muted);font-size:.75rem;font-weight:800;list-style:none}
+.manual-interaction summary::-webkit-details-marker{display:none}
+.manual-interaction summary:after{content:"+";float:right;color:var(--green);font-size:1rem}
+.manual-interaction[open] summary:after{content:"−"}
+.manual-interaction form{margin-top:12px}
+.empty.compact{padding:14px;min-height:0}
+@media (max-width:640px){.interaction-grid{grid-template-columns:1fr}}
