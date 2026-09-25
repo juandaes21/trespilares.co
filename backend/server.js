@@ -41,6 +41,22 @@ const WORKING_DAYS = new Set(
     .filter((n) => n >= 1 && n <= 7)
 );
 
+function cleanTouch(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const clean = (input, max) => String(input || "").trim().slice(0, max);
+  const touch = {
+    source: clean(value.source, 80).toLowerCase(),
+    medium: clean(value.medium, 80).toLowerCase(),
+    campaign: clean(value.campaign, 120),
+    content: clean(value.content, 180),
+    term: clean(value.term, 180),
+    referrer: clean(value.referrer, 800),
+    landingUrl: clean(value.landingUrl, 800),
+    capturedAt: clean(value.capturedAt, 80)
+  };
+  return Object.fromEntries(Object.entries(touch).filter(([,v]) => v));
+}
+
 const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
   "https://trespilares.co,https://www.trespilares.co")
   .split(",")
@@ -95,6 +111,8 @@ async function ensureSchema() {
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS meet_link TEXT;
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS assigned_member_name TEXT;
     ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS assigned_member_email TEXT;
+    ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS first_touch JSONB NOT NULL DEFAULT '{}'::jsonb;
+    ALTER TABLE appointment_requests ADD COLUMN IF NOT EXISTS last_touch JSONB NOT NULL DEFAULT '{}'::jsonb;
 
     DROP INDEX IF EXISTS appointment_requests_active_start_idx;
     CREATE INDEX IF NOT EXISTS appointment_requests_member_time_idx
@@ -597,11 +615,14 @@ app.post("/api/appointments", async (req, res) => {
   const topic = String(body.topic || "").trim();
   const startTime = String(body.startTime || "").trim();
   const source = String(body.source || "website").trim().slice(0, 80);
-  const utmSource = String(body.utmSource || "").trim().slice(0, 120);
-  const utmMedium = String(body.utmMedium || "").trim().slice(0, 120);
-  const utmCampaign = String(body.utmCampaign || "").trim().slice(0, 160);
-  const utmContent = String(body.utmContent || "").trim().slice(0, 160);
-  const referrer = String(body.referrer || "").trim().slice(0, 800);
+  const attribution = body.attribution && typeof body.attribution === "object" ? body.attribution : {};
+  const firstTouch = cleanTouch(body.firstTouch || attribution.firstTouch);
+  const lastTouch = cleanTouch(body.lastTouch || attribution.lastTouch);
+  const utmSource = String(body.utmSource || lastTouch.source || firstTouch.source || "").trim().slice(0, 120);
+  const utmMedium = String(body.utmMedium || lastTouch.medium || firstTouch.medium || "").trim().slice(0, 120);
+  const utmCampaign = String(body.utmCampaign || lastTouch.campaign || firstTouch.campaign || "").trim().slice(0, 160);
+  const utmContent = String(body.utmContent || lastTouch.content || firstTouch.content || "").trim().slice(0, 160);
+  const referrer = String(body.referrer || lastTouch.referrer || firstTouch.referrer || "").trim().slice(0, 800);
 
   if (name.length < 2 || name.length > 120) return res.status(400).json({ ok:false, error:"Nombre inválido." });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return res.status(400).json({ ok:false, error:"Email inválido." });
@@ -663,13 +684,32 @@ app.post("/api/appointments", async (req, res) => {
       utmCampaign,
       utmContent,
       referrer,
+      firstTouch,
+      lastTouch,
       assignedMemberEmail: assignedMember.email
     });
     await client.query(
       `UPDATE appointment_requests
-          SET crm_contact_id=$2,utm_source=$3,utm_medium=$4,utm_campaign=$5,utm_content=$6,referrer=$7
+          SET crm_contact_id=$2,
+              utm_source=$3,
+              utm_medium=$4,
+              utm_campaign=$5,
+              utm_content=$6,
+              referrer=$7,
+              first_touch=$8::jsonb,
+              last_touch=$9::jsonb
         WHERE id=$1`,
-      [id,crmContactId,utmSource || null,utmMedium || null,utmCampaign || null,utmContent || null,referrer || null]
+      [
+        id,
+        crmContactId,
+        utmSource || null,
+        utmMedium || null,
+        utmCampaign || null,
+        utmContent || null,
+        referrer || null,
+        JSON.stringify(firstTouch),
+        JSON.stringify(lastTouch)
+      ]
     );
     await client.query("COMMIT");
 
