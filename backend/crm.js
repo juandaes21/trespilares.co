@@ -231,9 +231,10 @@ export async function importCrmTargetsFromEnv(pool) {
   let tasks = 0;
 
   for (const target of targets) {
+    const contactIdInput = cleanText(target?.contactId, 80);
     const name = cleanText(target?.name, 160);
     const linkedinUrl = cleanText(target?.linkedinUrl, 500);
-    if (!name || !linkedinUrl) continue;
+    if (!contactIdInput && (!name || !linkedinUrl)) continue;
 
     const ownerEmail = normalizeEmail(target?.ownerEmail || "");
     const ownerName = cleanText(target?.ownerName || "", 160);
@@ -264,10 +265,15 @@ export async function importCrmTargetsFromEnv(pool) {
     const scoreReason = cleanNullable(target?.scoreReason, 2000);
     const scoreVersion = cleanNullable(target?.scoreVersion || "TP-LI-v1", 80);
 
-    const existing = await pool.query(
-      "SELECT id FROM crm_contacts WHERE linkedin_url=$1 AND archived=FALSE LIMIT 1",
-      [linkedinUrl]
-    );
+    const existing = contactIdInput
+      ? await pool.query(
+          "SELECT id FROM crm_contacts WHERE id::text=$1 AND archived=FALSE LIMIT 1",
+          [contactIdInput]
+        )
+      : await pool.query(
+          "SELECT id FROM crm_contacts WHERE linkedin_url=$1 AND archived=FALSE LIMIT 1",
+          [linkedinUrl]
+        );
 
     let contactId;
     if (existing.rowCount) {
@@ -315,6 +321,7 @@ export async function importCrmTargetsFromEnv(pool) {
       );
       updated += 1;
     } else {
+      if (contactIdInput) continue;
       contactId = crypto.randomUUID();
       await pool.query(
         `INSERT INTO crm_contacts(
@@ -352,6 +359,33 @@ export async function importCrmTargetsFromEnv(pool) {
         ]
       );
       imported += 1;
+    }
+
+    const completeTasks = Array.isArray(target?.completeTasks) ? target.completeTasks.slice(0, 20) : [];
+    for (const taskToComplete of completeTasks) {
+      const taskType = cleanText(taskToComplete?.type, 80);
+      const taskTitle = cleanText(taskToComplete?.title, 240);
+      if (!taskType && !taskTitle) continue;
+      const params = [contactId];
+      const filters = ["contact_id=$1", "status='open'"];
+      if (taskType) {
+        params.push(taskType);
+        filters.push("type=$" + params.length);
+      }
+      if (taskTitle) {
+        params.push(taskTitle);
+        filters.push("title=$" + params.length);
+      }
+      const openTasks = await pool.query(
+        "SELECT id FROM crm_tasks WHERE " + filters.join(" AND ") + " LIMIT 20",
+        params
+      );
+      for (const row of openTasks.rows) {
+        await pool.query(
+          "UPDATE crm_tasks SET status='done',completed_at=NOW(),updated_at=NOW() WHERE id=$1",
+          [row.id]
+        );
+      }
     }
 
     const activity = target?.activity;
