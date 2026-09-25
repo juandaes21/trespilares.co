@@ -191,6 +191,7 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_1_draft TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_2_draft TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_comment_draft TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_post_context TEXT;
     CREATE INDEX IF NOT EXISTS crm_contacts_score_idx ON crm_contacts(target_score DESC) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_linkedin_invited_idx
       ON crm_contacts(linkedin_invited_at)
@@ -440,6 +441,7 @@ export async function importCrmTargetsFromEnv(pool) {
           cleanText(target?.linkedinFollowup1Draft,4000),
           cleanText(target?.linkedinFollowup2Draft,4000),
           cleanText(target?.linkedinCommentDraft,4000),
+          cleanText(target?.linkedinPostContext,4000),
           target?.replaceLinkedinDrafts === true
         ]
       );
@@ -452,8 +454,8 @@ export async function importCrmTargetsFromEnv(pool) {
           id,name,company,title,linkedin_url,segment,owner_user_id,source_channel,source_profile,
           source_detail,stage,signal,notes,target_score,score_breakdown,score_reason,score_version,
           linkedin_invite_note,linkedin_first_dm_draft,linkedin_followup_1_draft,
-          linkedin_followup_2_draft,linkedin_comment_draft,scored_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,NOW())`,
+          linkedin_followup_2_draft,linkedin_comment_draft,linkedin_post_context,scored_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'linkedin',$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21,$22,NOW())`,
         [
           contactId,
           name,
@@ -475,7 +477,8 @@ export async function importCrmTargetsFromEnv(pool) {
           cleanNullable(target?.linkedinFirstDmDraft,4000),
           cleanNullable(target?.linkedinFollowup1Draft,4000),
           cleanNullable(target?.linkedinFollowup2Draft,4000),
-          cleanNullable(target?.linkedinCommentDraft,4000)
+          cleanNullable(target?.linkedinCommentDraft,4000),
+          cleanNullable(target?.linkedinPostContext,4000)
         ]
       );
       await pool.query(
@@ -778,7 +781,9 @@ async function generateLinkedInDraftsWithAi(contact, postContext = "") {
   }
 
   const model = cleanText(process.env.GROQ_MODEL || "openai/gpt-oss-20b", 120);
-  const publicContext = cleanText(postContext || contact.signal || "", 4000);
+  const prospectContext = cleanText(contact.signal || "", 3000);
+  const storedPostContext = cleanText(contact.linkedin_post_context || "", 4000);
+  const realPostContext = cleanText(postContext || storedPostContext, 4000);
   const internalNotes = cleanText(contact.notes || "", 3000);
 
   const instructions = `Eres el redactor de outreach de Tres Pilares, una marca colombiana de planificación patrimonial.
@@ -794,8 +799,12 @@ REGLAS ESTRICTAS:
 - El primer DM debe ser breve y terminar con una pregunta fácil de responder solo si surge naturalmente.
 - Follow-up 1 debe agregar una idea nueva; nunca "solo haciendo seguimiento".
 - Follow-up 2 debe cerrar con elegancia y sin presión.
-- El comentario solo puede existir si el contexto público describe claramente una publicación, reflexión, evento o contenido concreto. Si solo hay bio, cargo, empresa, score o notas internas, devuelve comment="".
-- Cuando haya comentario, debe responder a la idea del contenido, no hablar del perfil de la persona.
+- El comentario SOLO puede existir si POST_CONTEXT contiene el texto, resumen o idea concreta de una publicación. Si POST_CONTEXT está vacío, devuelve comment="" sin excepción.
+- PROFILE_CONTEXT sirve para invitación/DM, nunca como fuente para un comentario.
+- El comentario debe aportar una idea, consecuencia, matiz, ejemplo o contraste sobre el post. No debe resumirlo ni felicitar al autor.
+- PROHIBIDO iniciar comentarios con "Buen punto", "Muy cierto", "Totalmente", "Excelente", "Gran reflexión", "Me parece interesante", "Interesante", "Hay una conversación valiosa", "Coincido" o variantes.
+- No menciones el cargo, años de experiencia, trayectoria, perfil, empresa o certificaciones dentro del comentario salvo que el propio post trate explícitamente de eso.
+- El comentario debe sonar como algo que Juan David realmente escribiría: directo, sobrio, específico, 1-3 frases, sin pitch, sin emojis y sin pregunta genérica al final.
 - Las notas internas sirven solo para entender contexto y jamás deben aparecer textual ni implícitamente en el mensaje.
 
 Devuelve exclusivamente JSON con estas claves: invite, firstDm, follow1, follow2, comment.`;
@@ -813,7 +822,8 @@ Devuelve exclusivamente JSON con estas claves: invite, firstDm, follow1, follow2
             title:cleanText(contact.title,160),
             stage:cleanText(contact.stage,40)
           },
-          public_context:publicContext || null,
+          PROFILE_CONTEXT:prospectContext || null,
+          POST_CONTEXT:realPostContext || null,
           internal_notes:internalNotes || null
         })
       }
@@ -1220,7 +1230,8 @@ export function createCrmRouter({ pool }) {
       linkedinFirstDmDraft:"linkedin_first_dm_draft",
       linkedinFollowup1Draft:"linkedin_followup_1_draft",
       linkedinFollowup2Draft:"linkedin_followup_2_draft",
-      linkedinCommentDraft:"linkedin_comment_draft"
+      linkedinCommentDraft:"linkedin_comment_draft",
+      linkedinPostContext:"linkedin_post_context"
     };
     const sets = [];
     const params = [];
@@ -1236,7 +1247,8 @@ export function createCrmRouter({ pool }) {
             "linkedinFirstDmDraft",
             "linkedinFollowup1Draft",
             "linkedinFollowup2Draft",
-            "linkedinCommentDraft"
+            "linkedinCommentDraft",
+            "linkedinPostContext"
           ]);
           value = cleanNullable(value, longFields.has(input) ? 4000 : 1500);
         }
@@ -1549,7 +1561,7 @@ export function createCrmRouter({ pool }) {
   router.post("/linkedin/contacts/:id/regenerate-drafts", auth, writeAccess, async (req, res) => {
     try {
       const result = await pool.query(
-        `SELECT id,name,company,title,stage,signal,notes,source_channel
+        `SELECT id,name,company,title,stage,signal,notes,source_channel,linkedin_post_context
            FROM crm_contacts
           WHERE id=$1 AND archived=FALSE
           LIMIT 1`,
@@ -1573,6 +1585,7 @@ export function createCrmRouter({ pool }) {
                 linkedin_followup_1_draft=$4,
                 linkedin_followup_2_draft=$5,
                 linkedin_comment_draft=$6,
+                linkedin_post_context=CASE WHEN NULLIF($7,'') IS NULL THEN linkedin_post_context ELSE $7 END,
                 updated_at=NOW()
           WHERE id=$1`,
         [
@@ -1581,7 +1594,8 @@ export function createCrmRouter({ pool }) {
           generated.drafts.firstDm,
           generated.drafts.follow1,
           generated.drafts.follow2,
-          generated.drafts.comment
+          generated.drafts.comment,
+          postContext
         ]
       );
 
