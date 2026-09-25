@@ -50,6 +50,11 @@ const esc = (value="") => String(value).replace(/[&<>"']/g, (m)=>({
 }[m]));
 const empty = (message) => '<div class="empty">' + esc(message) + '</div>';
 const max = (arr) => Math.max(1,...arr.map(x=>Number(x)||0));
+const touchLabel = (touch) => {
+  if (!touch || typeof touch !== "object") return "—";
+  const parts = [touch.source,touch.campaign,touch.content].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "—";
+};
 
 async function api(path, options={}) {
   const config = {
@@ -325,7 +330,9 @@ function renderContactDetail(data) {
         '<div class="fact"><small>Cargo</small><strong>'+esc(c.title||"—")+'</strong></div>'+
         '<div class="fact"><small>Segmento</small><strong>'+esc(c.segment||"—")+'</strong></div>'+
         '<div class="fact"><small>Score de prospección</small><strong>'+esc(c.target_score ?? "—")+'/100</strong></div>'+
-        '<div class="fact"><small>Origen</small><strong>'+esc(c.source_channel||"—")+(c.source_profile?' · '+esc(c.source_profile):'')+'</strong></div>'+
+        '<div class="fact"><small>Origen CRM</small><strong>'+esc(c.source_channel||"—")+(c.source_profile?' · '+esc(c.source_profile):'')+'</strong></div>'+
+        '<div class="fact"><small>Primer touch</small><strong>'+esc(touchLabel(c.first_touch))+'</strong></div>'+
+        '<div class="fact"><small>Último touch</small><strong>'+esc(touchLabel(c.last_touch))+'</strong></div>'+
         '<div class="fact"><small>Criterio</small><strong>'+esc(c.score_reason||"—")+'</strong></div>'+
         '<div class="fact"><small>Último contacto</small><strong>'+esc(c.last_contact_at?fmtDate(c.last_contact_at):"—")+'</strong></div>'+
         '<div class="fact"><small>Próxima acción</small><strong>'+esc(c.next_action_at?fmtDate(c.next_action_at):"—")+'</strong></div>'+
