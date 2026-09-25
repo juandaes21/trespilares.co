@@ -763,6 +763,118 @@ export async function syncAppointmentToCrm(client, data) {
   return id;
 }
 
+
+function sanitizeAiDraft(value, max = 4000) {
+  return cleanText(value, max).replace(/^["']|["']$/g, "").trim();
+}
+
+async function generateLinkedInDraftsWithAi(contact, postContext = "") {
+  const apiKey = cleanText(process.env.GROQ_API_KEY, 500);
+  if (!apiKey) {
+    const error = new Error("La IA del CRM todavía no está configurada.");
+    error.code = "AI_NOT_CONFIGURED";
+    throw error;
+  }
+
+  const model = cleanText(process.env.GROQ_MODEL || "openai/gpt-oss-20b", 120);
+  const publicContext = cleanText(postContext || contact.signal || "", 4000);
+  const internalNotes = cleanText(contact.notes || "", 3000);
+
+  const instructions = `Eres el redactor de outreach de Tres Pilares, una marca colombiana de planificación patrimonial.
+Escribe en español colombiano natural, profesional, sobrio y humano. El objetivo inicial es abrir conversación, no vender.
+
+REGLAS ESTRICTAS:
+- Nunca digas "me llamó la atención tu perfil", "vi tu perfil", "encaje", "ICP", "score" ni lenguaje de prospección.
+- No inventes posts, logros, relaciones, dolores, hobbies, cifras ni hechos que no estén en el contexto.
+- No hagas pitch de Tres Pilares en la invitación ni en el primer DM.
+- No uses elogios vacíos ni frases grandilocuentes.
+- Evita sonar como plantilla de LinkedIn.
+- La nota de conexión debe tener máximo 200 caracteres.
+- El primer DM debe ser breve y terminar con una pregunta fácil de responder solo si surge naturalmente.
+- Follow-up 1 debe agregar una idea nueva; nunca "solo haciendo seguimiento".
+- Follow-up 2 debe cerrar con elegancia y sin presión.
+- El comentario solo puede existir si el contexto público describe claramente una publicación, reflexión, evento o contenido concreto. Si solo hay bio, cargo, empresa, score o notas internas, devuelve comment="".
+- Cuando haya comentario, debe responder a la idea del contenido, no hablar del perfil de la persona.
+- Las notas internas sirven solo para entender contexto y jamás deben aparecer textual ni implícitamente en el mensaje.
+
+Devuelve exclusivamente JSON con estas claves: invite, firstDm, follow1, follow2, comment.`;
+
+  const payload = {
+    model,
+    messages:[
+      { role:"system", content:instructions },
+      {
+        role:"user",
+        content:JSON.stringify({
+          prospect:{
+            name:cleanText(contact.name,160),
+            company:cleanText(contact.company,160),
+            title:cleanText(contact.title,160),
+            stage:cleanText(contact.stage,40)
+          },
+          public_context:publicContext || null,
+          internal_notes:internalNotes || null
+        })
+      }
+    ],
+    temperature:0.65,
+    max_completion_tokens:900,
+    response_format:{ type:"json_object" }
+  };
+
+  const controller = new AbortController();
+  const timer = setTimeout(()=>controller.abort(), 22000);
+  let response;
+  try {
+    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method:"POST",
+      headers:{
+        "Authorization":"Bearer "+apiKey,
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify(payload),
+      signal:controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const detail = cleanText(await response.text().catch(()=>""), 1000);
+    const error = new Error("No pudimos generar los borradores con IA.");
+    error.code = "AI_PROVIDER_ERROR";
+    error.detail = detail;
+    throw error;
+  }
+
+  const body = await response.json();
+  const raw = body?.choices?.[0]?.message?.content || "{}";
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const error = new Error("La IA devolvió una respuesta inválida.");
+    error.code = "AI_INVALID_RESPONSE";
+    throw error;
+  }
+
+  const drafts = {
+    invite:sanitizeAiDraft(parsed.invite,200),
+    firstDm:sanitizeAiDraft(parsed.firstDm),
+    follow1:sanitizeAiDraft(parsed.follow1),
+    follow2:sanitizeAiDraft(parsed.follow2),
+    comment:sanitizeAiDraft(parsed.comment)
+  };
+
+  if (!drafts.invite || !drafts.firstDm || !drafts.follow1 || !drafts.follow2) {
+    const error = new Error("La IA no devolvió todos los borradores requeridos.");
+    error.code = "AI_INCOMPLETE_RESPONSE";
+    throw error;
+  }
+
+  return { drafts, model };
+}
+
 export function createCrmRouter({ pool }) {
   const router = express.Router();
 
@@ -1430,6 +1542,76 @@ export function createCrmRouter({ pool }) {
     } catch (error) {
       console.error("crm_linkedin_today_failed", error);
       res.status(500).json({ ok:false, error:"No pudimos cargar la prospección." });
+    }
+  });
+
+  router.post("/linkedin/contacts/:id/regenerate-drafts", auth, writeAccess, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT id,name,company,title,stage,signal,notes,source_channel
+           FROM crm_contacts
+          WHERE id=$1 AND archived=FALSE
+          LIMIT 1`,
+        [req.params.id]
+      );
+      if (!result.rowCount) {
+        return res.status(404).json({ ok:false, error:"Contacto no encontrado." });
+      }
+      const contact = result.rows[0];
+      if (contact.source_channel !== "linkedin") {
+        return res.status(400).json({ ok:false, error:"Esta acción solo aplica a prospectos de LinkedIn." });
+      }
+
+      const postContext = cleanText(req.body?.postContext, 4000);
+      const generated = await generateLinkedInDraftsWithAi(contact, postContext);
+
+      await pool.query(
+        `UPDATE crm_contacts
+            SET linkedin_invite_note=$2,
+                linkedin_first_dm_draft=$3,
+                linkedin_followup_1_draft=$4,
+                linkedin_followup_2_draft=$5,
+                linkedin_comment_draft=$6,
+                updated_at=NOW()
+          WHERE id=$1`,
+        [
+          contact.id,
+          generated.drafts.invite,
+          generated.drafts.firstDm,
+          generated.drafts.follow1,
+          generated.drafts.follow2,
+          generated.drafts.comment
+        ]
+      );
+
+      await pool.query(
+        `INSERT INTO crm_activities(id,contact_id,type,direction,summary,metadata,created_by)
+         VALUES ($1,$2,'note','internal',$3,$4::jsonb,$5)`,
+        [
+          crypto.randomUUID(),
+          contact.id,
+          "Borradores LinkedIn regenerados con IA",
+          JSON.stringify({ provider:"groq", model:generated.model }),
+          req.user?.id || null
+        ]
+      );
+
+      await audit(pool, req.user?.id, "linkedin_ai_drafts", "contact", contact.id, {
+        provider:"groq",
+        model:generated.model,
+        commentGenerated:Boolean(generated.drafts.comment)
+      });
+
+      res.json({ ok:true, drafts:generated.drafts, model:generated.model });
+    } catch (error) {
+      console.error("crm_linkedin_ai_drafts_failed", error?.code || error?.message, error?.detail || "");
+      if (error?.code === "AI_NOT_CONFIGURED") {
+        return res.status(503).json({
+          ok:false,
+          error:"La IA del CRM aún no está configurada. Agrega GROQ_API_KEY en Railway."
+        });
+      }
+      res.status(502).json({ ok:false, error:error?.message || "No pudimos generar los borradores con IA." });
     }
   });
 
