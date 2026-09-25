@@ -23,6 +23,83 @@ if (mobileMenu) {
 }
 
 const API_BASE_URL = 'https://tres-pilares-api-production.up.railway.app';
+const ATTRIBUTION_STORAGE_KEY = 'trespilares_attribution_v1';
+
+function inferReferrerSource(referrer) {
+  if (!referrer) return '';
+  try {
+    const host = new URL(referrer).hostname.replace(/^www\./,'').toLowerCase();
+    const currentHost = window.location.hostname.replace(/^www\./,'').toLowerCase();
+    if (!host || host === currentHost || host.endsWith('.' + currentHost)) return '';
+    if (host.includes('linkedin.com')) return 'linkedin';
+    if (host.includes('instagram.com')) return 'instagram';
+    if (host.includes('tiktok.com')) return 'tiktok';
+    if (host.includes('facebook.com') || host.includes('fb.com')) return 'facebook';
+    if (host.includes('youtube.com') || host.includes('youtu.be')) return 'youtube';
+    if (host.includes('google.')) return 'google';
+    if (host.includes('bing.com')) return 'bing';
+    return 'referral';
+  } catch {
+    return '';
+  }
+}
+
+function defaultMediumForSource(source) {
+  if (['linkedin','instagram','tiktok','facebook','youtube'].includes(source)) return 'organic_social';
+  if (['google','bing'].includes(source)) return 'organic_search';
+  if (source === 'referral') return 'referral';
+  return source === 'direct' ? 'direct' : '';
+}
+
+function captureCurrentTouch() {
+  const params = new URLSearchParams(window.location.search);
+  const referrer = document.referrer || '';
+  const inferredSource = inferReferrerSource(referrer);
+  const source = (params.get('utm_source') || inferredSource || 'direct').trim().toLowerCase();
+  const medium = (params.get('utm_medium') || defaultMediumForSource(source)).trim().toLowerCase();
+  return {
+    source,
+    medium,
+    campaign: (params.get('utm_campaign') || '').trim(),
+    content: (params.get('utm_content') || '').trim(),
+    term: (params.get('utm_term') || '').trim(),
+    referrer,
+    landingUrl: window.location.href.split('#')[0],
+    capturedAt: new Date().toISOString()
+  };
+}
+
+function hasMeaningfulAcquisition(touch) {
+  if (!touch) return false;
+  return touch.source !== 'direct' ||
+    Boolean(touch.campaign || touch.content || touch.term || touch.referrer);
+}
+
+function loadAttribution() {
+  const current = captureCurrentTouch();
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(ATTRIBUTION_STORAGE_KEY) || '{}') || {};
+  } catch {
+    saved = {};
+  }
+
+  const attribution = {
+    firstTouch: saved.firstTouch || current,
+    lastTouch: saved.lastTouch || current
+  };
+
+  if (hasMeaningfulAcquisition(current) || !saved.lastTouch) {
+    attribution.lastTouch = current;
+  }
+
+  try {
+    localStorage.setItem(ATTRIBUTION_STORAGE_KEY, JSON.stringify(attribution));
+  } catch {}
+  return attribution;
+}
+
+const marketingAttribution = loadAttribution();
 const leadForm = document.getElementById('lead-form');
 const leadStatus = document.getElementById('sent');
 const leadSubmit = document.getElementById('lead-submit');
@@ -235,19 +312,21 @@ if (leadForm) {
     }
 
     const form = new FormData(leadForm);
-    const params = new URLSearchParams(window.location.search);
+    const currentAttribution = loadAttribution();
+    const lastTouch = currentAttribution.lastTouch || {};
     const payload = {
       name: String(form.get('name') || '').trim(),
       email: String(form.get('email') || '').trim(),
       phone: String(form.get('phone') || '').trim(),
       topic: String(form.get('topic') || '').trim(),
       startTime: selectedSlot,
-      source: 'trespilares.co',
-      utmSource: params.get('utm_source') || '',
-      utmMedium: params.get('utm_medium') || '',
-      utmCampaign: params.get('utm_campaign') || '',
-      utmContent: params.get('utm_content') || '',
-      referrer: document.referrer || ''
+      source: 'website',
+      utmSource: lastTouch.source || '',
+      utmMedium: lastTouch.medium || '',
+      utmCampaign: lastTouch.campaign || '',
+      utmContent: lastTouch.content || '',
+      referrer: lastTouch.referrer || document.referrer || '',
+      attribution: currentAttribution
     };
 
     leadSubmit.disabled = true;
