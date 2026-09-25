@@ -1299,7 +1299,7 @@ export function createCrmRouter({ pool }) {
 
   router.get("/linkedin/today", auth, async (_req, res) => {
     try {
-      const [tasks,prospects,stats] = await Promise.all([
+      const [tasks,upcoming,prospects,stats] = await Promise.all([
         pool.query(
           `SELECT t.*,c.name AS contact_name,c.company,c.title AS contact_title,
                     c.linkedin_url,c.stage,c.signal,u.name AS assigned_name,
@@ -1313,6 +1313,20 @@ export function createCrmRouter({ pool }) {
                 AND t.due_at<NOW()+INTERVAL '1 day'
               ORDER BY t.due_at ASC
               LIMIT 50`
+        ),
+        pool.query(
+          `SELECT t.*,c.name AS contact_name,c.company,c.title AS contact_title,
+                    c.linkedin_url,c.stage,c.signal,u.name AS assigned_name,
+                    c.linkedin_invited_at,c.linkedin_connected_at,c.linkedin_first_dm_at,
+                    c.linkedin_followup_1_at,c.linkedin_followup_2_at,c.linkedin_last_reply_at
+               FROM crm_tasks t
+               JOIN crm_contacts c ON c.id=t.contact_id
+               LEFT JOIN crm_users u ON u.id=t.assigned_user_id
+              WHERE t.status='open'
+                AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
+                AND t.due_at>=NOW()+INTERVAL '1 day'
+              ORDER BY t.due_at ASC
+              LIMIT 20`
         ),
         pool.query(
           `SELECT c.*,u.name AS owner_name,
@@ -1355,6 +1369,15 @@ export function createCrmRouter({ pool }) {
                   AND linkedin_connected_at IS NULL
                   AND linkedin_invited_at < NOW() - ($1::int * INTERVAL '1 day')
               )::int AS stale_pending,
+              COUNT(*) FILTER (
+                WHERE stage IN ('target','engaged','connected','conversation','need_identified')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM crm_tasks t
+                     WHERE t.contact_id=crm_contacts.id
+                       AND t.status='open'
+                       AND t.type IN ('linkedin_comment','linkedin_connect','linkedin_dm','linkedin_followup')
+                  )
+              )::int AS uncovered,
               CASE
                 WHEN COUNT(*) FILTER (WHERE linkedin_invited_at IS NOT NULL) = 0 THEN 0
                 ELSE ROUND(
@@ -1371,6 +1394,7 @@ export function createCrmRouter({ pool }) {
       res.json({
         ok:true,
         tasks:tasks.rows,
+        upcoming:upcoming.rows,
         prospects:prospects.rows,
         stats:stats.rows[0] || {},
         policy:{ staleDays:LINKEDIN_STALE_DAYS, dailyTarget:LINKEDIN_DAILY_TARGET }
