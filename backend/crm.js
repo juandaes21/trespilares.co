@@ -829,9 +829,28 @@ Devuelve exclusivamente JSON con estas claves: invite, firstDm, follow1, follow2
         })
       }
     ],
-    temperature:0.65,
-    max_completion_tokens:900,
-    response_format:{ type:"json_object" }
+    temperature:0.45,
+    reasoning_effort:"low",
+    max_completion_tokens:1800,
+    response_format:{
+      type:"json_schema",
+      json_schema:{
+        name:"linkedin_outreach_drafts",
+        strict:true,
+        schema:{
+          type:"object",
+          additionalProperties:false,
+          properties:{
+            invite:{ type:"string" },
+            firstDm:{ type:"string" },
+            follow1:{ type:"string" },
+            follow2:{ type:"string" },
+            comment:{ type:"string" }
+          },
+          required:["invite","firstDm","follow1","follow2","comment"]
+        }
+      }
+    }
   };
 
   const controller = new AbortController();
