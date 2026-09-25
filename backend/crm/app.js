@@ -32,8 +32,8 @@ const state = {
   taskScope:"open"
 };
 
-const $ = (selector, root=document) => root.querySelector(selector);
-const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
+const $ = (selector, root=document) => root?.querySelector(selector) || null;
+const $ = (selector, root=document) => root ? [...root.querySelectorAll(selector)] : [];
 const stageLabel = (stage) => STAGES.find(([key]) => key === stage)?.[1] || stage || "—";
 const fmtDate = (value, opts={}) => {
   if (!value) return "—";
@@ -325,10 +325,14 @@ function renderContactDetail(data) {
     ? data.appointments.map(a=>'<div class="stack-item"><span class="stack-icon">◷</span><div class="stack-main"><strong>'+esc(a.topic||"Reunión Tres Pilares")+'</strong><small>'+fmtDate(a.start_time)+' · '+esc(a.assigned_member_name||"")+'</small></div></div>').join("")
     : empty("No hay reuniones asociadas.");
   const generatedDrafts=buildLinkedInDrafts(c);
-  const inviteDraft=c.linkedin_invite_note || generatedDrafts.invite;
-  const firstDmDraft=c.linkedin_first_dm_draft || generatedDrafts.firstDm;
-  const follow1Draft=c.linkedin_followup_1_draft || generatedDrafts.follow1;
-  const follow2Draft=c.linkedin_followup_2_draft || generatedDrafts.follow2;
+  const storedDrafts={
+    invite:c.linkedin_invite_note || generatedDrafts.invite,
+    firstDm:c.linkedin_first_dm_draft || generatedDrafts.firstDm,
+    follow1:c.linkedin_followup_1_draft || generatedDrafts.follow1,
+    follow2:c.linkedin_followup_2_draft || generatedDrafts.follow2
+  };
+  const stageDraft=linkedinStageDraft(c,storedDrafts);
+  const commentDraft=c.linkedin_comment_draft || generatedDrafts.comment || "";
   const linkedinPrimary=linkedinNextAction(c);
 
   return '<div class="detail-grid">'+
@@ -367,19 +371,17 @@ function renderContactDetail(data) {
             (c.stage==="connected"?'<button class="stack-action" type="button" data-linkedin-action="reply_received" data-contact-id="'+c.id+'">Respondió</button>':'')+
           '</div>'+
         '</div>'+
-        '<p class="draft-note">Borradores base construidos solo con el contexto guardado en CRM. Revísalos antes de enviar; no inventan datos ni usan una API paga.</p>'+
-        '<div class="draft-block"><div class="draft-head"><strong>Nota de conexión</strong><small id="invite-count">'+inviteDraft.length+'/200</small></div>'+
-          '<textarea id="linkedin-invite-draft" rows="3" maxlength="200">'+esc(inviteDraft)+'</textarea>'+
-          '<button class="text-action" type="button" data-copy-draft="linkedin-invite-draft">Copiar nota</button></div>'+
-        '<div class="draft-block"><div class="draft-head"><strong>Primer DM</strong></div>'+
-          '<textarea id="linkedin-first-dm-draft" rows="5">'+esc(firstDmDraft)+'</textarea>'+
-          '<button class="text-action" type="button" data-copy-draft="linkedin-first-dm-draft">Copiar DM</button></div>'+
-        '<div class="draft-block"><div class="draft-head"><strong>Follow-up #1</strong><small>+4 días</small></div>'+
-          '<textarea id="linkedin-followup-1-draft" rows="4">'+esc(follow1Draft)+'</textarea>'+
-          '<button class="text-action" type="button" data-copy-draft="linkedin-followup-1-draft">Copiar</button></div>'+
-        '<div class="draft-block"><div class="draft-head"><strong>Follow-up #2</strong><small>cierre</small></div>'+
-          '<textarea id="linkedin-followup-2-draft" rows="4">'+esc(follow2Draft)+'</textarea>'+
-          '<button class="text-action" type="button" data-copy-draft="linkedin-followup-2-draft">Copiar</button></div>'+
+        '<p class="draft-note">El CRM muestra únicamente el mensaje que corresponde a la etapa actual. Revísalo antes de enviar.</p>'+
+        (stageDraft?.status
+          ? '<div class="stage-message-hint">'+esc(stageDraft.status)+'</div>'
+          : '<div class="draft-block stage-draft"><div class="draft-head"><strong>'+esc(stageDraft?.title||"Mensaje")+'</strong>'+
+              (stageDraft?.maxLength?'<small id="stage-draft-count">'+String(stageDraft.value||"").length+'/'+stageDraft.maxLength+'</small>':(stageDraft?.meta?'<small>'+esc(stageDraft.meta)+'</small>':''))+
+            '</div>'+
+            '<textarea id="'+esc(stageDraft?.id||"linkedin-stage-draft")+'" rows="5" '+(stageDraft?.maxLength?'maxlength="'+stageDraft.maxLength+'"':'')+'>'+esc(stageDraft?.value||"")+'</textarea>'+
+            '<button class="text-action" type="button" data-copy-draft="'+esc(stageDraft?.id||"linkedin-stage-draft")+'">'+esc(stageDraft?.copy||"Copiar mensaje")+'</button></div>')+
+        '<div class="draft-block"><div class="draft-head"><strong>Comentario</strong><small>Escribe o ajusta antes de publicar</small></div>'+
+          '<textarea id="linkedin-comment-draft" rows="4" placeholder="Escribe aquí el comentario para esta publicación…">'+esc(commentDraft)+'</textarea>'+
+          '<button class="text-action" type="button" data-copy-draft="linkedin-comment-draft">Copiar comentario</button></div>'+
         '<div class="modal-actions draft-actions"><button class="btn ghost" type="button" id="regenerate-linkedin-drafts">Regenerar base</button><button class="btn primary" type="button" id="save-linkedin-drafts">Guardar borradores</button></div>'+
       '</div>':'')+
       '<div class="detail-card interaction-card"><div class="panel-head"><div><span class="eyebrow">ACCIÓN RÁPIDA</span><h3>Registrar interacción</h3></div><span class="stage-badge">'+esc(stageLabel(c.stage))+'</span></div>'+
@@ -423,10 +425,10 @@ function bindContactDetail(data) {
     } catch(error){ alert(error.message); }
   });
 
-  const inviteTextarea=$("#linkedin-invite-draft");
-  inviteTextarea?.addEventListener("input",()=>{
-    const counter=$("#invite-count");
-    if(counter) counter.textContent=inviteTextarea.value.length+"/200";
+  const stageTextarea=stageDraft?.id ? $("#"+stageDraft.id) : null;
+  stageTextarea?.addEventListener("input",()=>{
+    const counter=$("#stage-draft-count");
+    if(counter && stageDraft?.maxLength) counter.textContent=stageTextarea.value.length+"/"+stageDraft.maxLength;
   });
 
   $$("[data-copy-draft]").forEach(btn=>btn.addEventListener("click",async()=>{
@@ -440,14 +442,15 @@ function bindContactDetail(data) {
 
   $("#regenerate-linkedin-drafts")?.addEventListener("click",()=>{
     const drafts=buildLinkedInDrafts(data.contact);
-    const fields=[
-      ["#linkedin-invite-draft",drafts.invite],
-      ["#linkedin-first-dm-draft",drafts.firstDm],
-      ["#linkedin-followup-1-draft",drafts.follow1],
-      ["#linkedin-followup-2-draft",drafts.follow2]
-    ];
-    fields.forEach(([selector,value])=>{ const el=$(selector); if(el) el.value=value; });
-    if($("#invite-count")) $("#invite-count").textContent=drafts.invite.length+"/200";
+    const freshStage=linkedinStageDraft(data.contact,drafts);
+    if (freshStage?.id) {
+      const el=$("#"+freshStage.id);
+      if(el) el.value=freshStage.value || "";
+      const counter=$("#stage-draft-count");
+      if(counter && freshStage.maxLength) counter.textContent=(freshStage.value||"").length+"/"+freshStage.maxLength;
+    }
+    const comment=$("#linkedin-comment-draft");
+    if(comment) comment.value=drafts.comment || "";
   });
 
   $("#save-linkedin-drafts")?.addEventListener("click",async()=>{
@@ -455,10 +458,11 @@ function bindContactDetail(data) {
       await api("/contacts/"+id,{
         method:"PATCH",
         body:{
-          linkedinInviteNote:$("#linkedin-invite-draft")?.value || "",
-          linkedinFirstDmDraft:$("#linkedin-first-dm-draft")?.value || "",
-          linkedinFollowup1Draft:$("#linkedin-followup-1-draft")?.value || "",
-          linkedinFollowup2Draft:$("#linkedin-followup-2-draft")?.value || ""
+          ...(stageDraft?.id==="linkedin-invite-draft" ? { linkedinInviteNote:$("#linkedin-invite-draft")?.value || "" } : {}),
+          ...(stageDraft?.id==="linkedin-first-dm-draft" ? { linkedinFirstDmDraft:$("#linkedin-first-dm-draft")?.value || "" } : {}),
+          ...(stageDraft?.id==="linkedin-followup-1-draft" ? { linkedinFollowup1Draft:$("#linkedin-followup-1-draft")?.value || "" } : {}),
+          ...(stageDraft?.id==="linkedin-followup-2-draft" ? { linkedinFollowup2Draft:$("#linkedin-followup-2-draft")?.value || "" } : {}),
+          linkedinCommentDraft:$("#linkedin-comment-draft")?.value || ""
         }
       });
       const btn=$("#save-linkedin-drafts");
@@ -687,7 +691,49 @@ function buildLinkedInDrafts(contact) {
   const follow2=(name ? name+", " : "")+
     "cierro el loop por aquí para no llenarte de mensajes. Si más adelante te sirve contrastar cómo estás ordenando protección, capital y objetivos de largo plazo, con gusto conversamos. Un abrazo.";
 
-  return { invite,firstDm,follow1,follow2 };
+  const comment=signal
+    ? "Buen punto. Me parece interesante especialmente "+signal.charAt(0).toLowerCase()+signal.slice(1)+". Creo que ahí hay una conversación importante entre crecimiento, decisiones financieras y horizonte de largo plazo."
+    : "";
+
+  return { invite,firstDm,follow1,follow2,comment };
+}
+
+function linkedinStageDraft(contact,drafts) {
+  if (!contact) return null;
+  if (contact.stage === "target") {
+    return { id:"linkedin-invite-draft", title:"Nota de conexión", value:drafts.invite, copy:"Copiar nota", maxLength:200 };
+  }
+  if (contact.stage === "engaged") {
+    if (!contact.linkedin_invited_at) {
+      return { id:"linkedin-invite-draft", title:"Nota de conexión", value:drafts.invite, copy:"Copiar nota", maxLength:200 };
+    }
+    return { status:"Invitación enviada. Espera a que acepte antes de enviar un DM." };
+  }
+  if (contact.stage === "connected") {
+    if (!contact.linkedin_first_dm_at) {
+      return { id:"linkedin-first-dm-draft", title:"Primer DM", value:drafts.firstDm, copy:"Copiar DM" };
+    }
+    if (!contact.linkedin_followup_1_at) {
+      return { id:"linkedin-followup-1-draft", title:"Follow-up #1", value:drafts.follow1, copy:"Copiar follow-up", meta:"+4 días" };
+    }
+    if (!contact.linkedin_followup_2_at) {
+      return { id:"linkedin-followup-2-draft", title:"Follow-up #2", value:drafts.follow2, copy:"Copiar cierre", meta:"cierre" };
+    }
+    return { status:"La secuencia de outreach ya quedó completa. Espera respuesta o mueve el prospecto a nurture." };
+  }
+  if (contact.stage === "conversation") {
+    return { status:"Ya hay conversación. Responde usando el contexto real del hilo; evita un mensaje automático genérico." };
+  }
+  if (contact.stage === "need_identified") {
+    return { status:"La necesidad ya está identificada. El siguiente mensaje debe profundizar o abrir la puerta a una reunión, según el contexto de la conversación." };
+  }
+  if (contact.stage === "meeting_proposed") {
+    return { status:"La reunión ya fue propuesta. Usa este espacio principalmente para comentarios o seguimiento contextual." };
+  }
+  if (contact.stage === "nurture") {
+    return { status:"Prospecto en nurture. Prioriza una nueva interacción con contexto antes de reabrir conversación." };
+  }
+  return { status:"No hay un borrador automático definido para esta etapa." };
 }
 
 function linkedinNextAction(item) {
