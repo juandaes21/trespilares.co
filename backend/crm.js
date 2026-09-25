@@ -190,6 +190,7 @@ export async function ensureCrmSchema(pool) {
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_first_dm_draft TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_1_draft TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_followup_2_draft TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS linkedin_comment_draft TEXT;
     CREATE INDEX IF NOT EXISTS crm_contacts_score_idx ON crm_contacts(target_score DESC) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_linkedin_invited_idx
       ON crm_contacts(linkedin_invited_at)
@@ -1084,7 +1085,8 @@ export function createCrmRouter({ pool }) {
       linkedinInviteNote:"linkedin_invite_note",
       linkedinFirstDmDraft:"linkedin_first_dm_draft",
       linkedinFollowup1Draft:"linkedin_followup_1_draft",
-      linkedinFollowup2Draft:"linkedin_followup_2_draft"
+      linkedinFollowup2Draft:"linkedin_followup_2_draft",
+      linkedinCommentDraft:"linkedin_comment_draft"
     };
     const sets = [];
     const params = [];
@@ -1099,7 +1101,8 @@ export function createCrmRouter({ pool }) {
             "linkedinInviteNote",
             "linkedinFirstDmDraft",
             "linkedinFollowup1Draft",
-            "linkedinFollowup2Draft"
+            "linkedinFollowup2Draft",
+            "linkedinCommentDraft"
           ]);
           value = cleanNullable(value, longFields.has(input) ? 4000 : 1500);
         }
