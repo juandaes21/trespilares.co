@@ -113,8 +113,8 @@ async function init() {
 function bindGlobalEvents() {
   $("#logout-btn")?.addEventListener("click", logout);
 
-  $$(".nav-item").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.view)));
-  $$("[data-go]").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.go)));
+  $$$(".nav-item").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.view)));
+  $$$("[data-go]").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.go)));
 
   $("#new-contact-btn")?.addEventListener("click",()=>$("#contact-dialog").showModal());
   $("#quick-task-btn")?.addEventListener("click",()=>openTaskDialog());
@@ -126,8 +126,8 @@ function bindGlobalEvents() {
   $("#content-form")?.addEventListener("submit",createContent);
   $("#team-form")?.addEventListener("submit",createUser);
 
-  $("[data-content-status]").forEach(btn=>btn.addEventListener("click",()=>{
-    $("[data-content-status]").forEach(x=>x.classList.remove("active"));
+  $$("[data-content-status]").forEach(btn=>btn.addEventListener("click",()=>{
+    $$("[data-content-status]").forEach(x=>x.classList.remove("active"));
     btn.classList.add("active");
     state.contentStatus=btn.dataset.contentStatus || "all";
     renderContent();
@@ -145,8 +145,8 @@ function bindGlobalEvents() {
   $("#contact-stage-filter")?.addEventListener("change",loadContacts);
   $("#contact-source-filter")?.addEventListener("change",loadContacts);
 
-  $$("[data-task-scope]").forEach(btn => btn.addEventListener("click",()=>{
-    $$("[data-task-scope]").forEach(x=>x.classList.remove("active"));
+  $$$("[data-task-scope]").forEach(btn => btn.addEventListener("click",()=>{
+    $$$("[data-task-scope]").forEach(x=>x.classList.remove("active"));
     btn.classList.add("active");
     state.taskScope=btn.dataset.taskScope;
     loadTasks();
@@ -207,8 +207,8 @@ const viewMeta = {
 };
 
 async function showView(name) {
-  $$(".nav-item").forEach(btn=>btn.classList.toggle("active",btn.dataset.view===name));
-  $$(".view").forEach(view=>view.classList.toggle("active-view",view.id==="view-"+name));
+  $$$(".nav-item").forEach(btn=>btn.classList.toggle("active",btn.dataset.view===name));
+  $$$(".view").forEach(view=>view.classList.toggle("active-view",view.id==="view-"+name));
   $("#view-kicker").textContent=viewMeta[name]?.[0] || "";
   $("#view-title").textContent=viewMeta[name]?.[1] || name;
 
@@ -329,7 +329,7 @@ function renderContactsTable() {
     '</tr>'
   ).join("") : '<tr><td colspan="6">'+empty("No encontramos contactos.")+'</td></tr>';
 
-  $$("[data-contact-id]",body).forEach(row=>row.addEventListener("click",()=>openContact(row.dataset.contactId)));
+  $$$("[data-contact-id]",body).forEach(row=>row.addEventListener("click",()=>openContact(row.dataset.contactId)));
 }
 
 async function createContact(event) {
@@ -491,7 +491,7 @@ function bindContactDetail(data) {
     if(counter && stageDraft?.maxLength) counter.textContent=stageTextarea.value.length+"/"+stageDraft.maxLength;
   });
 
-  $$("[data-copy-draft]").forEach(btn=>btn.addEventListener("click",async()=>{
+  $$$("[data-copy-draft]").forEach(btn=>btn.addEventListener("click",async()=>{
     const field=$("#"+btn.dataset.copyDraft);
     if(!field) return;
     await navigator.clipboard.writeText(field.value);
@@ -593,7 +593,7 @@ function renderPipeline() {
     '</section>';
   }).join("");
 
-  $$(".lead-card",board).forEach(card=>{
+  $$$(".lead-card",board).forEach(card=>{
     card.addEventListener("dragstart",()=>{
       card.classList.add("dragging");
       card.dataset.dragging="1";
@@ -605,7 +605,7 @@ function renderPipeline() {
     card.addEventListener("click",()=>openContact(card.dataset.id));
   });
 
-  $$(".kanban-col",board).forEach(col=>{
+  $$$(".kanban-col",board).forEach(col=>{
     col.addEventListener("dragover",(event)=>{ event.preventDefault(); col.classList.add("drag-over"); });
     col.addEventListener("dragleave",()=>col.classList.remove("drag-over"));
     col.addEventListener("drop",async(event)=>{
@@ -661,7 +661,7 @@ function renderTasks() {
 }
 
 function bindTaskActions(root=document) {
-  $$("[data-complete-task]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$$("[data-complete-task]",root).forEach(btn=>btn.addEventListener("click",async()=>{
     try {
       await api("/tasks/"+btn.dataset.completeTask,{method:"PATCH",body:{status:"done"}});
       if ($("#view-tasks").classList.contains("active-view")) await loadTasks();
@@ -669,7 +669,7 @@ function bindTaskActions(root=document) {
       if ($("#view-dashboard").classList.contains("active-view")) await loadDashboard();
     } catch(error){ alert(error.message); }
   }));
-  $$("[data-open-contact]",root).forEach(btn=>btn.addEventListener("click",()=>{
+  $$$("[data-open-contact]",root).forEach(btn=>btn.addEventListener("click",()=>{
     if(btn.dataset.openContact) openContact(btn.dataset.openContact);
   }));
 }
@@ -891,7 +891,7 @@ async function runCrmStageAction(contactId,stage) {
 }
 
 function bindCrmStageActions(root=document) {
-  $$("[data-crm-stage]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$$("[data-crm-stage]",root).forEach(btn=>btn.addEventListener("click",async()=>{
     const old=btn.textContent;
     btn.disabled=true;
     btn.textContent="Guardando…";
@@ -946,7 +946,7 @@ async function runLinkedInAction(contactId,action) {
 }
 
 function bindLinkedInActions(root=document) {
-  $$("[data-linkedin-action]",root).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$$("[data-linkedin-action]",root).forEach(btn=>btn.addEventListener("click",async()=>{
     const old=btn.textContent;
     btn.disabled=true;
     btn.textContent="Guardando…";
@@ -1017,7 +1017,7 @@ function renderLinkedIn() {
 
   bindTaskActions($("#linkedin-tasks"));
   bindLinkedInActions($("#view-linkedin"));
-  $$("[data-new-task-contact]").forEach(btn=>btn.addEventListener("click",()=>openTaskDialog(btn.dataset.newTaskContact)));
+  $$$("[data-new-task-contact]").forEach(btn=>btn.addEventListener("click",()=>openTaskDialog(btn.dataset.newTaskContact)));
 }
 
 async function loadContent() {
@@ -1198,7 +1198,7 @@ function renderTeam() {
     '</div>';
   }).join("") : empty("No hay usuarios.");
 
-  $$("[data-toggle-user]",target).forEach(btn=>btn.addEventListener("click",async()=>{
+  $$$("[data-toggle-user]",target).forEach(btn=>btn.addEventListener("click",async()=>{
     const user=state.users.find(item=>item.id===btn.dataset.toggleUser);
     if(!user) return;
 
