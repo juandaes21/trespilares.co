@@ -126,8 +126,8 @@ function bindGlobalEvents() {
   $("#content-form")?.addEventListener("submit",createContent);
   $("#team-form")?.addEventListener("submit",createUser);
 
-  $("[data-content-status]").forEach(btn=>btn.addEventListener("click",()=>{
-    $("[data-content-status]").forEach(x=>x.classList.remove("active"));
+  $$("[data-content-status]").forEach(btn=>btn.addEventListener("click",()=>{
+    $$("[data-content-status]").forEach(x=>x.classList.remove("active"));
     btn.classList.add("active");
     state.contentStatus=btn.dataset.contentStatus || "all";
     renderContent();
