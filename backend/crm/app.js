@@ -84,8 +84,12 @@ function setMessage(selector, text, ok=false) {
 }
 
 async function init() {
-  bindGlobalEvents();
-  fillStageSelects();
+  try {
+    bindGlobalEvents();
+    fillStageSelects();
+  } catch (error) {
+    console.error("crm_ui_init_failed", error);
+  }
 
   try {
     const me = await api("/me");
