@@ -177,7 +177,12 @@ tbody tr:hover{background:#fcfaf7}
 .wide-modal{width:min(980px,calc(100vw - 32px))}
 .modal-card{background:var(--paper);border-radius:22px;padding:24px;box-shadow:0 28px 90px rgba(0,0,0,.2)}
 .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}
-.icon-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:1.2rem}
+.icon-btn{appearance:none;-webkit-appearance:none;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:1.2rem;padding:0;display:grid;place-items:center;line-height:1;flex:0 0 auto}
+.icon-btn:hover{border-color:#cdbfAA;background:#fcfaf6}
+.icon-btn:focus-visible{outline:3px solid rgba(198,161,100,.28);outline-offset:2px}
+.modal-close-btn::before{content:"×";display:block;font-family:Arial,sans-serif;font-size:22px;font-weight:400;line-height:1;transform:translateY(-1px)}
+#detail-dialog{max-height:calc(100vh - 24px);overflow:auto;overscroll-behavior:contain}
+#detail-dialog .modal-head{position:sticky;top:-24px;z-index:5;background:var(--paper);padding-top:24px;margin-top:-24px}
 .form-grid{display:grid;gap:14px}
 .form-grid.two{grid-template-columns:1fr 1fr}
 .span-2{grid-column:1/-1}

@@ -152,7 +152,16 @@ function bindGlobalEvents() {
     loadTasks();
   }));
 
-  $("[data-close-detail]")?.addEventListener("click",()=>$("#detail-dialog").close());
+  $("[data-close-detail]")?.addEventListener("click",(event)=>{
+    event.preventDefault();
+    const dialog=$("#detail-dialog");
+    if(dialog?.open) dialog.close();
+  });
+
+  $("#detail-dialog")?.addEventListener("click",(event)=>{
+    const dialog=event.currentTarget;
+    if(event.target===dialog && dialog.open) dialog.close();
+  });
 }
 
 function fillStageSelects() {
