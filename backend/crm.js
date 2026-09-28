@@ -596,8 +596,14 @@ export async function importCrmTargetsFromEnv(pool) {
         );
         if (activityType !== "note" && activityType !== "stage_change") {
           await pool.query(
-            "UPDATE crm_contacts SET last_contact_at=NOW(),updated_at=NOW() WHERE id=$1",
-            [contactId]
+            "UPDATE crm_contacts SET last_contact_at=COALESCE($2::timestamptz,NOW()),updated_at=NOW() WHERE id=$1",
+            [contactId,activity.occurredAt || null]
+          );
+        }
+        if (activityType === "linkedin_dm" && direction === "inbound") {
+          await pool.query(
+            "UPDATE crm_contacts SET linkedin_last_reply_at=COALESCE($2::timestamptz,NOW()),linkedin_last_action_at=COALESCE($2::timestamptz,NOW()),updated_at=NOW() WHERE id=$1",
+            [contactId,activity.occurredAt || null]
           );
         }
       }
