@@ -38,7 +38,7 @@ const STRATEGIES = [
     key:"partner_life_insurance",
     label:"Seguro de vida para socios",
     short:"Vida socios",
-    description:"Compañías con dos o más socios donde una muerte o incapacidad puede afectar continuidad, liquidez o compra de participaciones. Explora protección societaria y efectos tributarios potenciales solo después de validar la estructura y la normativa aplicable."
+    description:"Compañías con dos o más socios donde una muerte o incapacidad puede afectar continuidad, liquidez o compra de participaciones. Explora continuidad, liquidez para compra de participación, sucesión y posibles beneficios o efectos tributarios, siempre sujetos a la estructura y a la normativa aplicable."
   }
 ];
 
