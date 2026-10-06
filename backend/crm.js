@@ -2,6 +2,12 @@ import express from "express";
 import crypto from "node:crypto";
 import { crmAuth, crmAdmin, crmWriteAccess, authServiceRequest, authServiceUrl, setCrmAccessCookie, clearCrmAccessCookie } from "./auth-client.js";
 
+export const CRM_STRATEGIES = [
+  "corporate_talks",
+  "direct_sales",
+  "partner_life_insurance"
+];
+
 export const CRM_STAGES = [
   "target",
   "engaged",
@@ -18,6 +24,7 @@ export const CRM_STAGES = [
   "lost"
 ];
 
+const STRATEGY_SET = new Set(CRM_STRATEGIES);
 const STAGE_SET = new Set(CRM_STAGES);
 const STAGE_INDEX = new Map(CRM_STAGES.map((stage,index)=>[stage,index]));
 const LINKEDIN_STALE_DAYS = Math.max(3, Math.min(60, Number(process.env.CRM_LINKEDIN_STALE_DAYS || 14)));
@@ -79,6 +86,24 @@ function cleanAttributionTouch(value) {
 
 function normalizeEmail(value) {
   return cleanText(value, 200).toLowerCase();
+}
+
+function normalizeLinkedinUrl(value) {
+  let raw = cleanText(value, 500);
+  if (!raw) return null;
+  if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+    if (!(host === "linkedin.com" || host.endsWith(".linkedin.com"))) return null;
+    if (!url.pathname || url.pathname === "/") return null;
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
 }
 
 function publicUser(row) {
@@ -163,6 +188,7 @@ export async function ensureCrmSchema(pool) {
       title TEXT,
       linkedin_url TEXT,
       segment TEXT,
+      strategy TEXT,
       owner_user_id UUID REFERENCES crm_users(id),
       source_channel TEXT NOT NULL DEFAULT 'manual',
       source_profile TEXT,
@@ -183,6 +209,7 @@ export async function ensureCrmSchema(pool) {
       archived BOOLEAN NOT NULL DEFAULT FALSE,
       created_by UUID REFERENCES crm_users(id)
     );
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS strategy TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS target_score SMALLINT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_reason TEXT;
@@ -208,11 +235,18 @@ export async function ensureCrmSchema(pool) {
       ON crm_contacts(linkedin_invited_at)
       WHERE archived = FALSE AND linkedin_invited_at IS NOT NULL;
     CREATE INDEX IF NOT EXISTS crm_contacts_stage_idx ON crm_contacts(stage) WHERE archived = FALSE;
+    CREATE INDEX IF NOT EXISTS crm_contacts_strategy_idx ON crm_contacts(strategy) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_owner_idx ON crm_contacts(owner_user_id) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_next_action_idx ON crm_contacts(next_action_at) WHERE archived = FALSE;
     CREATE UNIQUE INDEX IF NOT EXISTS crm_contacts_email_unique_idx
       ON crm_contacts(LOWER(email))
       WHERE email IS NOT NULL AND email <> '' AND archived = FALSE;
+
+    UPDATE crm_contacts
+       SET strategy='direct_sales'
+     WHERE strategy IS NULL
+       AND source_channel='linkedin'
+       AND target_score IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS crm_activities (
       id UUID PRIMARY KEY,
@@ -1096,6 +1130,7 @@ export function createCrmRouter({ pool }) {
     const stage = cleanText(req.query.stage, 40);
     const owner = cleanText(req.query.owner, 60);
     const source = cleanText(req.query.source, 60);
+    const strategy = cleanText(req.query.strategy, 80);
     const params = [];
     const where = ["c.archived=FALSE"];
 
@@ -1120,6 +1155,10 @@ export function createCrmRouter({ pool }) {
       params.push(source);
       where.push("c.source_channel=$" + params.length);
     }
+    if (strategy && STRATEGY_SET.has(strategy)) {
+      params.push(strategy);
+      where.push("c.strategy=$" + params.length);
+    }
 
     const result = await pool.query(
       `SELECT c.*,u.name AS owner_name,a.title AS source_content_title,a.tracking_code
@@ -1137,17 +1176,64 @@ export function createCrmRouter({ pool }) {
     const body = req.body || {};
     const name = cleanText(body.name, 160);
     if (name.length < 2) {
-      return res.status(400).json({ ok:false, error:"El nombre es obligatorio." });
+      return res.status(400).json({ ok:false, error:"Escribe el nombre del contacto antes de guardarlo." });
     }
+
+    const linkedinUrl = normalizeLinkedinUrl(body.linkedinUrl);
+    if (!cleanText(body.linkedinUrl, 500)) {
+      return res.status(400).json({
+        ok:false,
+        error:"LinkedIn es obligatorio. Pega la URL completa del perfil, por ejemplo https://www.linkedin.com/in/nombre."
+      });
+    }
+    if (!linkedinUrl) {
+      return res.status(400).json({
+        ok:false,
+        error:"La URL de LinkedIn no es válida. Usa un enlace de linkedin.com al perfil del contacto."
+      });
+    }
+
+    const strategy = cleanText(body.strategy, 80);
+    if (!STRATEGY_SET.has(strategy)) {
+      return res.status(400).json({
+        ok:false,
+        error:"Selecciona una estrategia comercial para este lead: Charlas en empresas, Venta directa o Seguro de vida para socios."
+      });
+    }
+
+    const ownerUserId = cleanText(body.ownerUserId, 60);
+    if (!ownerUserId) {
+      return res.status(400).json({ ok:false, error:"Selecciona el perfil responsable del lead." });
+    }
+
+    const owner = await pool.query(
+      "SELECT id,name FROM crm_users WHERE id::text=$1 AND active=TRUE LIMIT 1",
+      [ownerUserId]
+    );
+    if (!owner.rowCount) {
+      return res.status(400).json({ ok:false, error:"El perfil responsable no existe o ya no tiene acceso al CRM." });
+    }
+
+    const duplicateLinkedin = await pool.query(
+      "SELECT id,name FROM crm_contacts WHERE archived=FALSE AND LOWER(linkedin_url)=LOWER($1) LIMIT 1",
+      [linkedinUrl]
+    );
+    if (duplicateLinkedin.rowCount) {
+      return res.status(409).json({
+        ok:false,
+        error:"Este perfil de LinkedIn ya está en el CRM como " + duplicateLinkedin.rows[0].name + ". Abre ese contacto en vez de crear uno nuevo."
+      });
+    }
+
     const stage = STAGE_SET.has(body.stage) ? body.stage : "target";
     const id = crypto.randomUUID();
     try {
       await pool.query(
         `INSERT INTO crm_contacts(
-          id,name,email,phone,company,title,linkedin_url,segment,owner_user_id,source_channel,
+          id,name,email,phone,company,title,linkedin_url,segment,strategy,owner_user_id,source_channel,
           source_profile,source_detail,source_content_id,stage,interest_pillar,signal,need_summary,
           notes,target_score,score_breakdown,score_reason,score_version,scored_at,next_action_at,created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::jsonb,$22,$23,$24,$25,$26)`,
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::jsonb,$23,$24,$25,$26,$27)`,
         [
           id,
           name,
@@ -1155,9 +1241,10 @@ export function createCrmRouter({ pool }) {
           cleanNullable(body.phone,40),
           cleanNullable(body.company,160),
           cleanNullable(body.title,160),
-          cleanNullable(body.linkedinUrl,500),
+          linkedinUrl,
           cleanNullable(body.segment,100),
-          cleanNullable(body.ownerUserId,60),
+          strategy,
+          owner.rows[0].id,
           cleanText(body.sourceChannel || "manual",60),
           cleanNullable(body.sourceProfile,100),
           cleanNullable(body.sourceDetail,180),
@@ -1177,17 +1264,29 @@ export function createCrmRouter({ pool }) {
         ]
       );
       await pool.query(
-        "INSERT INTO crm_activities(id,contact_id,type,direction,summary,created_by) VALUES ($1,$2,'note','internal','Contacto creado en CRM',$3)",
-        [crypto.randomUUID(),id,req.crmUser.id]
+        "INSERT INTO crm_activities(id,contact_id,type,direction,summary,created_by,metadata) VALUES ($1,$2,'note','internal','Contacto creado en CRM',$3,$4::jsonb)",
+        [
+          crypto.randomUUID(),
+          id,
+          req.crmUser.id,
+          JSON.stringify({ strategy, ownerUserId:owner.rows[0].id })
+        ]
       );
-      await audit(pool, req.crmUser.id, "create", "contact", id, { source:body.sourceChannel || "manual" });
+      await audit(pool, req.crmUser.id, "create", "contact", id, {
+        source:body.sourceChannel || "manual",
+        strategy,
+        ownerUserId:owner.rows[0].id
+      });
       res.status(201).json({ ok:true, id });
     } catch (error) {
       if (String(error.code) === "23505") {
-        return res.status(409).json({ ok:false, error:"Ya existe un contacto activo con ese email." });
+        return res.status(409).json({ ok:false, error:"Ya existe un contacto activo con ese correo. Busca el contacto existente antes de crear otro." });
+      }
+      if (String(error.code) === "22P02") {
+        return res.status(400).json({ ok:false, error:"Uno de los datos seleccionados no es válido. Revisa el perfil responsable y vuelve a intentar." });
       }
       console.error("crm_contact_create_failed", error);
-      res.status(500).json({ ok:false, error:"No pudimos crear el contacto." });
+      res.status(500).json({ ok:false, error:"No pudimos guardar el contacto. Tus datos no se perdieron: revisa los campos e inténtalo de nuevo." });
     }
   });
 
@@ -1243,6 +1342,48 @@ export function createCrmRouter({ pool }) {
   });
 
   router.patch("/contacts/:id", auth, writeAccess, async (req, res) => {
+    const body = req.body || {};
+
+    if (Object.prototype.hasOwnProperty.call(body, "linkedinUrl")) {
+      const linkedinUrl = normalizeLinkedinUrl(body.linkedinUrl);
+      if (!linkedinUrl) {
+        return res.status(400).json({
+          ok:false,
+          error:"LinkedIn no puede quedar vacío y debe ser una URL válida de linkedin.com."
+        });
+      }
+      const duplicate = await pool.query(
+        "SELECT id,name FROM crm_contacts WHERE archived=FALSE AND id<>$1 AND LOWER(linkedin_url)=LOWER($2) LIMIT 1",
+        [req.params.id, linkedinUrl]
+      );
+      if (duplicate.rowCount) {
+        return res.status(409).json({
+          ok:false,
+          error:"Ese perfil de LinkedIn ya pertenece a " + duplicate.rows[0].name + " en el CRM."
+        });
+      }
+      body.linkedinUrl = linkedinUrl;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "strategy") && !STRATEGY_SET.has(body.strategy)) {
+      return res.status(400).json({ ok:false, error:"Selecciona una estrategia comercial válida." });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, "ownerUserId")) {
+      const ownerUserId = cleanText(body.ownerUserId, 60);
+      if (!ownerUserId) {
+        return res.status(400).json({ ok:false, error:"El contacto debe tener un perfil responsable." });
+      }
+      const owner = await pool.query(
+        "SELECT id FROM crm_users WHERE id::text=$1 AND active=TRUE LIMIT 1",
+        [ownerUserId]
+      );
+      if (!owner.rowCount) {
+        return res.status(400).json({ ok:false, error:"El perfil responsable no existe o está inactivo." });
+      }
+      body.ownerUserId = owner.rows[0].id;
+    }
+
     const allowed = {
       name:"name",
       email:"email",
@@ -1251,6 +1392,7 @@ export function createCrmRouter({ pool }) {
       title:"title",
       linkedinUrl:"linkedin_url",
       segment:"segment",
+      strategy:"strategy",
       ownerUserId:"owner_user_id",
       sourceChannel:"source_channel",
       sourceProfile:"source_profile",
@@ -1273,8 +1415,8 @@ export function createCrmRouter({ pool }) {
     const sets = [];
     const params = [];
     for (const [input,column] of Object.entries(allowed)) {
-      if (Object.prototype.hasOwnProperty.call(req.body || {}, input)) {
-        let value = req.body[input];
+      if (Object.prototype.hasOwnProperty.call(body, input)) {
+        let value = body[input];
         if (input === "email") value = cleanNullable(value,200)?.toLowerCase() || null;
         else if (input === "nextActionAt") value = value || null;
         else {
@@ -1294,20 +1436,20 @@ export function createCrmRouter({ pool }) {
       }
     }
 
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "targetScore")) {
-      const score = Number(req.body.targetScore);
+    if (Object.prototype.hasOwnProperty.call(body, "targetScore")) {
+      const score = Number(body.targetScore);
       params.push(Number.isFinite(score) ? Math.max(0,Math.min(100,Math.round(score))) : null);
       sets.push("target_score=$" + params.length);
       sets.push("scored_at=NOW()");
     }
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "scoreBreakdown")) {
-      params.push(JSON.stringify(req.body.scoreBreakdown && typeof req.body.scoreBreakdown === "object" ? req.body.scoreBreakdown : {}));
+    if (Object.prototype.hasOwnProperty.call(body, "scoreBreakdown")) {
+      params.push(JSON.stringify(body.scoreBreakdown && typeof body.scoreBreakdown === "object" ? body.scoreBreakdown : {}));
       sets.push("score_breakdown=$" + params.length + "::jsonb");
     }
 
     let stageChanged = false;
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, "stage") && STAGE_SET.has(req.body.stage)) {
-      params.push(req.body.stage);
+    if (Object.prototype.hasOwnProperty.call(body, "stage") && STAGE_SET.has(body.stage)) {
+      params.push(body.stage);
       sets.push("stage=$" + params.length);
       stageChanged = true;
     }
@@ -1332,19 +1474,19 @@ export function createCrmRouter({ pool }) {
           [
             crypto.randomUUID(),
             req.params.id,
-            "Etapa actualizada a " + req.body.stage,
+            "Etapa actualizada a " + body.stage,
             req.crmUser.id,
-            JSON.stringify({ stage:req.body.stage })
+            JSON.stringify({ stage:body.stage })
           ]
         );
       }
       await audit(pool, req.crmUser.id, "update", "contact", req.params.id, {
-        fields:Object.keys(req.body || {})
+        fields:Object.keys(body)
       });
       res.json({ ok:true });
     } catch (error) {
       if (String(error.code) === "23505") {
-        return res.status(409).json({ ok:false, error:"Ese email ya está asociado a otro contacto." });
+        return res.status(409).json({ ok:false, error:"Ese correo ya está asociado a otro contacto activo." });
       }
       console.error("crm_contact_update_failed", error);
       res.status(500).json({ ok:false, error:"No pudimos actualizar el contacto." });
