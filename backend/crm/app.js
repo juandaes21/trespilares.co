@@ -145,7 +145,7 @@ function showExpiredSession() {
   state.linkedin = null;
   sessionStorage.removeItem("tp_crm_signed_in");
 
-  $("dialog[open]").forEach(dialog=>dialog.close());
+  document.querySelectorAll("dialog[open]").forEach(dialog=>dialog.close());
   $("#app-shell").hidden = true;
   $("#auth-shell").hidden = false;
   setMessage("#login-message", "Tu sesión caducó. Vuelve a entrar con Google para continuar. Tus contactos guardados siguen en el CRM.");
