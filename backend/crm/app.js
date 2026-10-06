@@ -142,7 +142,7 @@ function isLinkedinUrl(value) {
 }
 
 function contactFormError(fieldName,message) {
-  $("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
+  $$("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
   const field=$('#contact-form [name="'+fieldName+'"]');
   field?.classList.add("input-error");
   field?.focus();
@@ -214,7 +214,7 @@ function bindGlobalEvents() {
     if(!state.users.length) await loadUsers();
     populateLeadOwnerControls();
     setMessage("#contact-message","");
-    $("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
+    $$("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
     $("#contact-dialog").showModal();
   });
   $("#quick-task-btn")?.addEventListener("click",()=>openTaskDialog());
@@ -224,8 +224,8 @@ function bindGlobalEvents() {
     state.pipelineOwner=event.currentTarget.value || "";
     loadPipeline();
   });
-  $("[data-pipeline-strategy]").forEach(btn=>btn.addEventListener("click",()=>{
-    $("[data-pipeline-strategy]").forEach(item=>item.classList.remove("active"));
+  $$("[data-pipeline-strategy]").forEach(btn=>btn.addEventListener("click",()=>{
+    $$("[data-pipeline-strategy]").forEach(item=>item.classList.remove("active"));
     btn.classList.add("active");
     state.pipelineStrategy=btn.dataset.pipelineStrategy || "";
     loadPipeline();
@@ -471,7 +471,7 @@ async function createContact(event) {
   const ownerUserId=String(form.get("ownerUserId")||"").trim();
 
   setMessage("#contact-message","");
-  $$("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
+  $$$("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
 
   if(name.length<2) return contactFormError("name","Escribe el nombre del contacto.");
   if(!linkedin) return contactFormError("linkedinUrl","LinkedIn es obligatorio para crear un lead.");
