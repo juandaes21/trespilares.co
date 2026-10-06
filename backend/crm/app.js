@@ -93,10 +93,28 @@ async function api(path, options={}) {
     ...options
   };
   if (config.body && typeof config.body !== "string") config.body = JSON.stringify(config.body);
-  const response = await fetch(API + path, config);
+
+  let response;
+  try {
+    response = await fetch(API + path, config);
+  } catch {
+    const error = new Error("No pudimos conectar con el CRM. Revisa tu conexión y vuelve a intentar.");
+    error.status = 0;
+    throw error;
+  }
+
   const data = await response.json().catch(()=>({}));
   if (!response.ok) {
-    const error = new Error(data.error || "Ocurrió un error.");
+    const fallback = response.status===401
+      ? "Tu sesión venció. Vuelve a iniciar sesión."
+      : response.status===403
+        ? "No tienes permisos para realizar esta acción."
+        : response.status===404
+          ? "No encontramos lo que estabas buscando."
+          : response.status>=500
+            ? "El CRM tuvo un error interno. Intenta nuevamente en unos segundos."
+            : "No pudimos completar la acción. Revisa los datos e inténtalo de nuevo.";
+    const error = new Error(data.error || fallback);
     error.status = response.status;
     throw error;
   }
@@ -192,7 +210,13 @@ function bindGlobalEvents() {
   $$(".nav-item").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.view)));
   $$("[data-go]").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.go)));
 
-  $("#new-contact-btn")?.addEventListener("click",()=>$("#contact-dialog").showModal());
+  $("#new-contact-btn")?.addEventListener("click",async()=>{
+    if(!state.users.length) await loadUsers();
+    populateLeadOwnerControls();
+    setMessage("#contact-message","");
+    $("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
+    $("#contact-dialog").showModal();
+  });
   $("#quick-task-btn")?.addEventListener("click",()=>openTaskDialog());
   $("#new-content-btn")?.addEventListener("click",()=>$("#content-dialog").showModal());
   $("#pipeline-refresh")?.addEventListener("click",loadPipeline);
@@ -454,6 +478,11 @@ async function createContact(event) {
   if(!isLinkedinUrl(linkedin)) return contactFormError("linkedinUrl","Pega una URL válida de LinkedIn, por ejemplo https://www.linkedin.com/in/nombre.");
   if(!strategy) return contactFormError("strategy","Selecciona la estrategia comercial con la que vas a trabajar este lead.");
   if(!ownerUserId) return contactFormError("ownerUserId","Selecciona qué perfil de Tres Pilares será responsable de este lead.");
+
+  const emailField=formEl.elements.email;
+  if(emailField?.value && !emailField.validity.valid) {
+    return contactFormError("email","Revisa el correo. Debe tener un formato como nombre@empresa.com.");
+  }
 
   const body=Object.fromEntries(form.entries());
   try {
