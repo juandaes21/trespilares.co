@@ -125,10 +125,22 @@
       </section>
 
       <section id="view-pipeline" class="view">
-        <div class="toolbar">
-          <div class="toolbar-copy"><p>Mueve cada relación según avance. El objetivo no es llenar el CRM: es saber cuál es el siguiente paso.</p></div>
-          <button class="btn ghost" id="pipeline-refresh">Actualizar</button>
+        <div class="toolbar pipeline-toolbar">
+          <div class="toolbar-copy">
+            <p>Mueve cada relación según avance y cambia de estrategia para trabajar un playbook comercial distinto.</p>
+          </div>
+          <div class="pipeline-actions">
+            <select id="pipeline-owner-filter" aria-label="Filtrar pipeline por perfil"><option value="">Todos los perfiles</option></select>
+            <button class="btn ghost" id="pipeline-refresh">Actualizar</button>
+          </div>
         </div>
+        <div class="segmented strategy-tabs" id="pipeline-strategy-tabs" aria-label="Estrategia comercial">
+          <button class="active" data-pipeline-strategy="">Todas</button>
+          <button data-pipeline-strategy="corporate_talks">Charlas en empresas</button>
+          <button data-pipeline-strategy="direct_sales">Venta directa</button>
+          <button data-pipeline-strategy="partner_life_insurance">Vida para socios</button>
+        </div>
+        <article id="strategy-context" class="strategy-context"></article>
         <div id="pipeline-board" class="kanban"></div>
       </section>
 
@@ -170,6 +182,13 @@
         <div class="toolbar filters">
           <input id="contact-search" class="search-input" placeholder="Buscar por nombre, empresa, cargo…">
           <select id="contact-stage-filter"><option value="">Todas las etapas</option></select>
+          <select id="contact-owner-filter"><option value="">Todos los perfiles</option></select>
+          <select id="contact-strategy-filter">
+            <option value="">Todas las estrategias</option>
+            <option value="corporate_talks">Charlas en empresas</option>
+            <option value="direct_sales">Venta directa</option>
+            <option value="partner_life_insurance">Vida para socios</option>
+          </select>
           <select id="contact-source-filter">
             <option value="">Todos los orígenes</option>
             <option value="linkedin">LinkedIn</option>
@@ -183,7 +202,7 @@
         <article class="panel table-panel">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Contacto</th><th>Score</th><th>Etapa</th><th>Origen</th><th>Owner</th><th>Próxima acción</th></tr></thead>
+              <thead><tr><th>Contacto</th><th>Score</th><th>Etapa</th><th>Estrategia</th><th>Origen</th><th>Perfil</th><th>Próxima acción</th></tr></thead>
               <tbody id="contacts-table"></tbody>
             </table>
           </div>
@@ -283,10 +302,17 @@
         <label>Nombre<input name="name" required></label>
         <label>Empresa<input name="company"></label>
         <label>Cargo<input name="title"></label>
-        <label>LinkedIn<input name="linkedinUrl" type="url" placeholder="https://linkedin.com/in/..."></label>
+        <label>LinkedIn <span class="required-mark">*</span><input name="linkedinUrl" type="url" required inputmode="url" autocomplete="url" placeholder="https://www.linkedin.com/in/..." aria-describedby="linkedin-help"><small id="linkedin-help" class="field-help">Obligatorio. Usa el perfil de la persona para evitar duplicados.</small></label>
         <label>Email<input name="email" type="email"></label>
         <label>WhatsApp<input name="phone"></label>
         <label>Segmento<select name="segment"><option value="">Seleccionar</option><option>Profesional en crecimiento</option><option>Empresario / independiente</option><option>Familia</option><option>Patrimonio en transición</option></select></label>
+        <label>Estrategia <span class="required-mark">*</span><select name="strategy" required>
+          <option value="">Seleccionar estrategia</option>
+          <option value="corporate_talks">Charlas en empresas</option>
+          <option value="direct_sales">Venta directa</option>
+          <option value="partner_life_insurance">Seguro de vida para socios</option>
+        </select></label>
+        <label>Perfil responsable <span class="required-mark">*</span><select name="ownerUserId" id="new-contact-owner" required><option value="">Seleccionar perfil</option></select></label>
         <label>Origen<select name="sourceChannel"><option value="linkedin">LinkedIn</option><option value="referido">Referido</option><option value="trespilares.co">Web</option><option value="instagram">Instagram</option><option value="evento">Evento</option><option value="manual">Manual</option></select></label>
         <label>Perfil de origen<select name="sourceProfile"><option value="">—</option><option>Juan David</option><option>Carolina</option><option>Giovanna</option><option>Tres Pilares</option></select></label>
         <label>Etapa<select name="stage" id="new-contact-stage"></select></label>
@@ -354,6 +380,6 @@
     </form>
   </dialog>
 
-  <script src="/crm/app.js?v=20260928-frontendfix2" defer></script>
+  <script src="/crm/app.js?v=20261005-strategy1" defer></script>
 </body>
 </html>
