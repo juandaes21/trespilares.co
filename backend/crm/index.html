@@ -28,7 +28,7 @@
     </section>
 
     <section class="auth-panel">
-      <div id="login-card" class="auth-card">
+      <div id="login-card" class="auth-card" tabindex="-1">
         <div>
           <span class="eyebrow">ACCESO PRIVADO</span>
           <h2>Entrar al CRM</h2>
@@ -39,7 +39,7 @@
           Continuar con Google
         </a>
         <p class="auth-hint">Usa el correo que haya sido habilitado por un administrador.</p>
-        <p id="login-message" class="form-message" aria-live="polite"></p>
+        <p id="login-message" class="form-message" role="alert" aria-live="assertive"></p>
       </div>
     </section>
   </div>
@@ -380,6 +380,6 @@
     </form>
   </dialog>
 
-  <script src="/crm/app.js?v=20261005-strategy1" defer></script>
+  <script src="/crm/app.js?v=20261006-sessionfix" defer></script>
 </body>
 </html>

@@ -105,15 +105,19 @@ async function api(path, options={}) {
 
   const data = await response.json().catch(()=>({}));
   if (!response.ok) {
-    const fallback = response.status===401
-      ? "Tu sesión venció. Vuelve a iniciar sesión."
-      : response.status===403
-        ? "No tienes permisos para realizar esta acción."
-        : response.status===404
-          ? "No encontramos lo que estabas buscando."
-          : response.status>=500
-            ? "El CRM tuvo un error interno. Intenta nuevamente en unos segundos."
-            : "No pudimos completar la acción. Revisa los datos e inténtalo de nuevo.";
+    if (response.status===401) {
+      showExpiredSession();
+      const error = new Error("Tu sesión caducó. Inicia sesión con Google para continuar.");
+      error.status = 401;
+      throw error;
+    }
+    const fallback = response.status===403
+      ? "No tienes permisos para realizar esta acción."
+      : response.status===404
+        ? "No encontramos lo que estabas buscando."
+        : response.status>=500
+          ? "El CRM tuvo un error interno. Intenta nuevamente en unos segundos."
+          : "No pudimos completar la acción. Revisa los datos e inténtalo de nuevo.";
     const error = new Error(data.error || fallback);
     error.status = response.status;
     throw error;
@@ -126,6 +130,33 @@ function setMessage(selector, text, ok=false) {
   if (!el) return;
   el.textContent = text || "";
   el.style.color = ok ? "#1D5647" : "";
+}
+
+function showExpiredSession() {
+  const wasSignedIn = Boolean(state.user) || sessionStorage.getItem("tp_crm_signed_in") === "1";
+  if (!wasSignedIn) return;
+
+  state.user = null;
+  state.users = [];
+  state.contacts = [];
+  state.tasks = [];
+  state.dashboard = null;
+  state.content = [];
+  state.linkedin = null;
+  sessionStorage.removeItem("tp_crm_signed_in");
+
+  document.querySelectorAll("dialog[open]").forEach(dialog=>dialog.close());
+  $("#app-shell").hidden = true;
+  $("#auth-shell").hidden = false;
+  setMessage("#login-message", "Tu sesión caducó. Vuelve a entrar con Google para continuar. Tus contactos guardados siguen en el CRM.");
+  $("#login-card")?.focus();
+}
+
+function checkSessionOnReturn() {
+  if (!state.user || document.visibilityState !== "visible") return;
+  api("/me").catch(error=>{
+    if (error.status !== 401) console.warn("crm_session_check_failed",error);
+  });
 }
 
 function isLinkedinUrl(value) {
@@ -206,6 +237,7 @@ async function init() {
 
 function bindGlobalEvents() {
   $("#logout-btn")?.addEventListener("click", logout);
+  document.addEventListener("visibilitychange", checkSessionOnReturn);
 
   $$(".nav-item").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.view)));
   $$("[data-go]").forEach(btn => btn.addEventListener("click",()=>showView(btn.dataset.go)));
@@ -289,12 +321,15 @@ function fillStageSelects() {
 }
 
 async function logout() {
+  sessionStorage.removeItem("tp_crm_signed_in");
   try { await api("/auth/logout",{method:"POST"}); } catch {}
   window.location.assign("/crm/");
 }
 
 function enterApp(user) {
   state.user=user;
+  sessionStorage.setItem("tp_crm_signed_in","1");
+  setMessage("#login-message","");
   state.contactOwner=user.role==="admin" ? "" : user.id;
   state.pipelineOwner=user.role==="admin" ? "" : user.id;
   $("#auth-shell").hidden=true;
