@@ -394,6 +394,8 @@ export async function importCrmTargetsFromEnv(pool) {
     }
 
     const requestedStage = STAGE_SET.has(target?.stage) ? target.stage : "target";
+    const requestedStrategy = STRATEGY_SET.has(target?.strategy) ? target.strategy : "direct_sales";
+    const explicitStrategy = STRATEGY_SET.has(target?.strategy);
 
     const score = Number.isFinite(Number(target?.targetScore))
       ? Math.max(0, Math.min(100, Math.round(Number(target.targetScore))))
@@ -540,6 +542,14 @@ export async function importCrmTargetsFromEnv(pool) {
       );
       imported += 1;
     }
+
+    await pool.query(
+      `UPDATE crm_contacts
+          SET strategy=CASE WHEN $3::boolean THEN $2 ELSE COALESCE(strategy,$2) END,
+              updated_at=NOW()
+        WHERE id=$1`,
+      [contactId, requestedStrategy, explicitStrategy]
+    );
 
     if (!contactIdInput && name) {
       const duplicates = await pool.query(
