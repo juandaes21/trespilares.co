@@ -149,7 +149,7 @@ export function createWebinarRouter({ pool }) {
       await client.query("COMMIT");
       return res.status(201).json({
         ok: true,
-        message: "Tu interés quedó registrado. Te contactaremos cuando se confirme la programación."
+        message: "Tu inscripción quedó registrada para el 5 de noviembre de 2026 a las 5:30 p. m. (Colombia). Guarda el enlace de acceso que aparece en pantalla."
       });
     } catch (error) {
       try { await client.query("ROLLBACK"); } catch {}
