@@ -10,19 +10,22 @@
 - No se envía automáticamente un correo ni se crea un evento de Calendar. El texto público lo presenta como lista de interés.
 
 ## Checklist antes de publicar
-1. **Confirmar fecha, hora y zona horaria**, duración y plataforma. Cambiar el hero, las FAQ y el copy del formulario cuando haya una fecha real.
+1. **Fecha y hora confirmadas:** jueves **5 de noviembre de 2026, 5:00 p. m., Colombia (America/Bogota, UTC−5)**. Confirmar duración, plataforma y enlace de acceso antes del evento.
 2. **Confirmar ponentes**. Los tres integrantes figuran como equipo organizador, no como ponentes confirmados.
 3. **Aprobar el tratamiento de datos personales en Colombia**: identificar de forma verificable al responsable del tratamiento, finalidad, política de privacidad completa, conservación, canal de ejercicio de derechos, información de terceros/proveedores y texto de autorización. Actualmente la landing incluye una autorización específica para información del webinar y contacto por correo, pero **no sustituye una política integral revisada jurídicamente**.
 4. Comprobar despliegue de backend en Railway y `DATABASE_URL`; probar el endpoint con origen `https://trespilares.co` y un registro de prueba; comprobar que aparezca en el CRM sin afectar contactos existentes.
 5. Revisar `FRONTEND_ORIGINS` en Railway: debe incluir el origen definitivo del sitio. El frontend usa `https://tres-pilares-api-production.up.railway.app`.
-6. Preparar proceso operativo para invitar a quienes se registren cuando exista fecha y enlace; no afirmar que ya se envió confirmación.
+6. Preparar el envío del enlace de acceso y recordatorios a quienes se registren. El formulario **no envía automáticamente** invitaciones ni crea citas en Google Calendar.
 7. Revisar la agenda y el ejemplo de COP $2.400 millones como **ilustración hipotética**, no diagnóstico, cotización, recomendación legal o cifra de producto.
 8. Validar el copy de Vida Socios contra material contractual vigente del proveedor para cualquier afirmación más específica.
 9. Hacer pruebas en móvil, teclado, formulario, validación de errores y estado de éxito.
 10. Monitorizar `webinar_registration_failed` en logs de Railway y captación por UTM.
 
-## Propuesta de evento (para confirmar)
+## Evento y datos logísticos
 - **Título**: Vida Socios | ¿Está tu empresa preparada para continuar?
+- **Fecha**: jueves 5 de noviembre de 2026.
+- **Hora**: 5:00 p. m., Colombia (America/Bogota, UTC−5).
+- **Enlace de acceso y duración**: pendientes de confirmar.
 - **Formato sugerido**: charla educativa en vivo + preguntas de empresarios.
 - **Audiencia**: accionistas, fundadores, socios de compañías y gerencia de empresas familiares.
 - **Ruta de contenidos**: continuidad, acuerdos societarios, capital para compra de participaciones, criterios para revisar coberturas.
