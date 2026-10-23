@@ -10,8 +10,8 @@
 - No se envía automáticamente un correo ni se crea un evento de Calendar. El texto público lo presenta como lista de interés.
 
 ## Checklist antes de publicar
-1. **Fecha y hora confirmadas:** jueves **5 de noviembre de 2026, 5:00 p. m., Colombia (America/Bogota, UTC−5)**. Confirmar duración, plataforma y enlace de acceso antes del evento.
-2. **Confirmar ponentes**. Los tres integrantes figuran como equipo organizador, no como ponentes confirmados.
+1. **Fecha y hora confirmadas:** jueves **5 de noviembre de 2026, 5:30 p. m., Colombia (America/Bogota, UTC−5)**. Plataforma prevista: Google Meet. Confirmar duración y generar un enlace válido antes de anunciarlo.
+2. **Ponentes confirmados:** Giovanna Guazzo, Carolina Ospina y Juan David Escobar. Revisar fotografías, cargos y orden de presentación antes de publicación.
 3. **Aprobar el tratamiento de datos personales en Colombia**: identificar de forma verificable al responsable del tratamiento, finalidad, política de privacidad completa, conservación, canal de ejercicio de derechos, información de terceros/proveedores y texto de autorización. Actualmente la landing incluye una autorización específica para información del webinar y contacto por correo, pero **no sustituye una política integral revisada jurídicamente**.
 4. Comprobar despliegue de backend en Railway y `DATABASE_URL`; probar el endpoint con origen `https://trespilares.co` y un registro de prueba; comprobar que aparezca en el CRM sin afectar contactos existentes.
 5. Revisar `FRONTEND_ORIGINS` en Railway: debe incluir el origen definitivo del sitio. El frontend usa `https://tres-pilares-api-production.up.railway.app`.
@@ -24,7 +24,9 @@
 ## Evento y datos logísticos
 - **Título**: Vida Socios | ¿Está tu empresa preparada para continuar?
 - **Fecha**: jueves 5 de noviembre de 2026.
-- **Hora**: 5:00 p. m., Colombia (America/Bogota, UTC−5).
+- **Hora**: 5:30 p. m., Colombia (America/Bogota, UTC−5).
+- **Ponentes:** Giovanna Guazzo, Carolina Ospina y Juan David Escobar.
+- **Plataforma prevista:** Google Meet (pendiente de configurar).
 - **Enlace de acceso y duración**: pendientes de confirmar.
 - **Formato sugerido**: charla educativa en vivo + preguntas de empresarios.
 - **Audiencia**: accionistas, fundadores, socios de compañías y gerencia de empresas familiares.
