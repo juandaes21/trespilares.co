@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createCrmRouter, ensureCrmSchema, syncAppointmentToCrm, importCrmTargetsFromEnv } from "./crm.js";
 import { google } from "googleapis";
+import { createWebinarRouter, ensureWebinarSchema } from "./webinar.js";
 import { DateTime, Interval } from "luxon";
 
 const { Pool } = pg;
@@ -83,6 +84,7 @@ const pool = process.env.DATABASE_URL
   : null;
 
 app.use("/api/crm", createCrmRouter({ pool }));
+app.use("/api/webinars", createWebinarRouter({ pool }));
 
 async function ensureSchema() {
   if (!pool) return;
@@ -742,6 +744,7 @@ app.use((_req, res) => res.status(404).json({ ok:false, error:"Not found" }));
 
 ensureSchema()
   .then(() => ensureCrmSchema(pool))
+  .then(() => ensureWebinarSchema(pool))
   .then(() => importCrmTargetsFromEnv(pool))
   .then(() => app.listen(PORT, "0.0.0.0", () => console.log(`Tres Pilares API listening on port ${PORT}`)))
   .catch((error) => {
