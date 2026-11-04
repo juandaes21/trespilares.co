@@ -534,7 +534,7 @@ async function createContact(event) {
   const ownerUserId=String(form.get("ownerUserId")||"").trim();
 
   setMessage("#contact-message","");
-  $$$("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
+  $("#contact-form .input-error").forEach(el=>el.classList.remove("input-error"));
 
   if(name.length<2) return contactFormError("name","Escribe el nombre del contacto.");
   if(!linkedin) return contactFormError("linkedinUrl","LinkedIn es obligatorio para crear un lead.");
