@@ -8,6 +8,8 @@ export const CRM_STRATEGIES = [
   "partner_life_insurance"
 ];
 
+export const CRM_BUSINESS_LINES = ["vida_socios","legado","brecha_pensional","educacion"];
+const BUSINESS_LINE_SET = new Set(CRM_BUSINESS_LINES);
 export const CRM_STAGES = [
   "target",
   "engaged",
@@ -210,6 +212,7 @@ export async function ensureCrmSchema(pool) {
       created_by UUID REFERENCES crm_users(id)
     );
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS strategy TEXT;
+    ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS business_line TEXT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS target_score SMALLINT;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb;
     ALTER TABLE crm_contacts ADD COLUMN IF NOT EXISTS score_reason TEXT;
@@ -235,6 +238,7 @@ export async function ensureCrmSchema(pool) {
       ON crm_contacts(linkedin_invited_at)
       WHERE archived = FALSE AND linkedin_invited_at IS NOT NULL;
     CREATE INDEX IF NOT EXISTS crm_contacts_stage_idx ON crm_contacts(stage) WHERE archived = FALSE;
+    CREATE INDEX IF NOT EXISTS crm_contacts_business_line_idx ON crm_contacts(business_line,stage) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_strategy_idx ON crm_contacts(strategy) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_owner_idx ON crm_contacts(owner_user_id) WHERE archived = FALSE;
     CREATE INDEX IF NOT EXISTS crm_contacts_next_action_idx ON crm_contacts(next_action_at) WHERE archived = FALSE;
@@ -1123,6 +1127,7 @@ export function createCrmRouter({ pool }) {
       res.json({
         ok:true,
         stages:stages.rows,
+        businessLines:(await pool.query("SELECT business_line,stage,COUNT(*)::int AS count FROM crm_contacts WHERE archived=FALSE GROUP BY business_line,stage")).rows,
         sources:sources.rows,
         owners:owners.rows,
         tasks:tasks.rows[0],
@@ -1141,6 +1146,7 @@ export function createCrmRouter({ pool }) {
     const owner = cleanText(req.query.owner, 60);
     const source = cleanText(req.query.source, 60);
     const strategy = cleanText(req.query.strategy, 80);
+    const businessLine = cleanText(req.query.businessLine, 40);
     const params = [];
     const where = ["c.archived=FALSE"];
 
@@ -1170,6 +1176,10 @@ export function createCrmRouter({ pool }) {
       where.push("c.strategy=$" + params.length);
     }
 
+    if (businessLine && BUSINESS_LINE_SET.has(businessLine)) {
+      params.push(businessLine);
+      where.push("c.business_line=$" + params.length);
+    }
     const result = await pool.query(
       `SELECT c.*,u.name AS owner_name,a.title AS source_content_title,a.tracking_code
          FROM crm_contacts c
@@ -1204,6 +1214,8 @@ export function createCrmRouter({ pool }) {
     }
 
     const strategy = cleanText(body.strategy, 80);
+    const businessLine = cleanText(body.businessLine, 40);
+    if (businessLine && !BUSINESS_LINE_SET.has(businessLine)) return res.status(400).json({ok:false,error:"Línea de negocio no válida."});
     if (!STRATEGY_SET.has(strategy)) {
       return res.status(400).json({
         ok:false,
@@ -1242,8 +1254,8 @@ export function createCrmRouter({ pool }) {
         `INSERT INTO crm_contacts(
           id,name,email,phone,company,title,linkedin_url,segment,strategy,owner_user_id,source_channel,
           source_profile,source_detail,source_content_id,stage,interest_pillar,signal,need_summary,
-          notes,target_score,score_breakdown,score_reason,score_version,scored_at,next_action_at,created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::jsonb,$23,$24,$25,$26,$27)`,
+          notes,target_score,score_breakdown,score_reason,score_version,scored_at,next_action_at,created_by,business_line
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22::jsonb,$23,$24,$25,$26,$27,$28)`,
         [
           id,
           name,
@@ -1270,7 +1282,8 @@ export function createCrmRouter({ pool }) {
           cleanNullable(body.scoreVersion,80),
           body.targetScore != null ? new Date().toISOString() : null,
           body.nextActionAt || null,
-          req.crmUser.id
+          req.crmUser.id,
+          businessLine || null
         ]
       );
       await pool.query(
@@ -1375,6 +1388,9 @@ export function createCrmRouter({ pool }) {
       body.linkedinUrl = linkedinUrl;
     }
 
+    if (Object.prototype.hasOwnProperty.call(body,"businessLine") && body.businessLine && !BUSINESS_LINE_SET.has(body.businessLine)) {
+      return res.status(400).json({ok:false,error:"Línea de negocio no válida."});
+    }
     if (Object.prototype.hasOwnProperty.call(body, "strategy") && !STRATEGY_SET.has(body.strategy)) {
       return res.status(400).json({ ok:false, error:"Selecciona una estrategia comercial válida." });
     }
@@ -1403,6 +1419,7 @@ export function createCrmRouter({ pool }) {
       linkedinUrl:"linkedin_url",
       segment:"segment",
       strategy:"strategy",
+      businessLine:"business_line",
       ownerUserId:"owner_user_id",
       sourceChannel:"source_channel",
       sourceProfile:"source_profile",

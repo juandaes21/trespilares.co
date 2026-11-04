@@ -42,6 +42,13 @@ const STRATEGIES = [
   }
 ];
 
+const BUSINESS_LINES = [
+  {key:"vida_socios",label:"Vida Socios"},
+  {key:"legado",label:"Legado"},
+  {key:"brecha_pensional",label:"Brecha pensional"},
+  {key:"educacion",label:"Educación"}
+];
+const businessLineLabel = key => BUSINESS_LINES.find(x=>x.key===key)?.label || "Sin clasificar";
 const state = {
   user:null,
   users:[],
@@ -56,6 +63,8 @@ const state = {
   contentFormat:"",
   contactOwner:"",
   contactStrategy:"",
+  contactBusinessLine:"",
+  pipelineBusinessLine:"",
   pipelineOwner:"",
   pipelineStrategy:""
 };
@@ -252,6 +261,10 @@ function bindGlobalEvents() {
   $("#quick-task-btn")?.addEventListener("click",()=>openTaskDialog());
   $("#new-content-btn")?.addEventListener("click",()=>$("#content-dialog").showModal());
   $("#pipeline-refresh")?.addEventListener("click",loadPipeline);
+  $("#pipeline-business-line-filter")?.addEventListener("change",event=>{
+    state.pipelineBusinessLine=event.currentTarget.value||"";
+    loadPipeline();
+  });
   $("#pipeline-owner-filter")?.addEventListener("change",event=>{
     state.pipelineOwner=event.currentTarget.value || "";
     loadPipeline();
@@ -286,6 +299,10 @@ function bindGlobalEvents() {
   $("#contact-search")?.addEventListener("input",debounce(loadContacts,250));
   $("#contact-stage-filter")?.addEventListener("change",loadContacts);
   $("#contact-source-filter")?.addEventListener("change",loadContacts);
+  $("#contact-business-line-filter")?.addEventListener("change",event=>{
+    state.contactBusinessLine=event.currentTarget.value||"";
+    loadContacts();
+  });
   $("#contact-owner-filter")?.addEventListener("change",event=>{
     state.contactOwner=event.currentTarget.value || "";
     loadContacts();
@@ -419,6 +436,16 @@ function renderDashboard(data,tasks,linkedin={}) {
     '</button>'
   ).join("");
 
+  const lineContainer=$("#dashboard-business-lines");
+  if(lineContainer){
+    const rows=data.businessLines||[];
+    lineContainer.innerHTML=BUSINESS_LINES.map(line=>{
+      const matches=rows.filter(x=>x.business_line===line.key);
+      const total=matches.reduce((sum,x)=>sum+Number(x.count||0),0);
+      const active=matches.filter(x=>["diagnostic","proposal","won"].includes(x.stage)).reduce((sum,x)=>sum+Number(x.count||0),0);
+      return '<div class="stack-item"><div class="stack-main"><strong>'+esc(line.label)+'</strong><small>'+active+' en diagnóstico, propuesta o implementación</small></div><strong>'+total+'</strong></div>';
+    }).join("");
+  }
   const liStats=linkedin?.stats||{};
   const liPolicy=linkedin?.policy||{};
   if ($("#linkedin-invites-today")) $("#linkedin-invites-today").textContent=Number(liStats.invites_today||0)+"/"+Number(liPolicy.dailyTarget||5);
@@ -465,14 +492,14 @@ async function loadContacts() {
   if(source) params.set("source",source);
   if(owner) params.set("owner",owner);
   if(strategy) params.set("strategy",strategy);
-
+  if(state.contactBusinessLine) params.set("businessLine",state.contactBusinessLine);
   try {
     const data=await api("/contacts?"+params.toString());
     state.contacts=data.contacts||[];
     renderContactsTable();
     populateTaskContacts();
   } catch (error) {
-    $("#contacts-table").innerHTML='<tr><td colspan="7">'+esc(error.message)+'</td></tr>';
+    $("#contacts-table").innerHTML='<tr><td colspan="8">'+esc(error.message)+'</td></tr>';
   }
 }
 
@@ -484,11 +511,12 @@ function renderContactsTable() {
       '<td><span class="stage-badge">'+(contact.target_score ?? "—")+'</span></td>'+
       '<td><span class="stage-badge">'+esc(stageLabel(contact.stage))+'</span></td>'+
       '<td><span class="strategy-badge">'+esc(strategyLabel(contact.strategy))+'</span></td>'+
+      '<td>'+esc(businessLineLabel(contact.business_line))+'</td>'+
       '<td>'+esc(contact.source_channel || "—")+(contact.source_profile ? '<br><small class="muted">'+esc(contact.source_profile)+'</small>' : '')+'</td>'+
       '<td>'+esc(contact.owner_name || "Sin asignar")+'</td>'+
       '<td>'+esc(contact.next_action_at ? fmtDate(contact.next_action_at) : "—")+'</td>'+
     '</tr>'
-  ).join("") : '<tr><td colspan="7">'+empty("No encontramos contactos con estos filtros.")+'</td></tr>';
+  ).join("") : '<tr><td colspan="8">'+empty("No encontramos contactos con estos filtros.")+'</td></tr>';
 
   $$("[data-contact-id]",body).forEach(row=>row.addEventListener("click",()=>openContact(row.dataset.contactId)));
 }
@@ -574,6 +602,7 @@ function renderContactDetail(data) {
         '<div class="fact"><small>Cargo</small><strong>'+esc(c.title||"—")+'</strong></div>'+
         '<div class="fact"><small>Segmento</small><strong>'+esc(c.segment||"—")+'</strong></div>'+
         '<div class="fact"><small>Estrategia</small><strong>'+esc(strategyLabel(c.strategy))+'</strong></div>'+
+        '<div class="fact"><small>Línea</small><strong>'+esc(businessLineLabel(c.business_line))+'</strong></div>'+
         '<div class="fact"><small>Score de prospección</small><strong>'+esc(c.target_score ?? "—")+'/100</strong></div>'+
         '<div class="fact"><small>Origen CRM</small><strong>'+esc(c.source_channel||"—")+(c.source_profile?' · '+esc(c.source_profile):'')+'</strong></div>'+
         '<div class="fact"><small>Primer touch</small><strong>'+esc(touchLabel(c.first_touch))+'</strong></div>'+
@@ -590,6 +619,7 @@ function renderContactDetail(data) {
       '<div class="form-grid two">'+
         '<label>Etapa<select id="detail-stage">'+stageOptions+'</select></label>'+
         '<label>Estrategia<select id="detail-strategy"><option value="">Seleccionar</option>'+strategyOptions+'</select></label>'+
+        '<label>Línea de negocio<select id="detail-business-line"><option value="">Sin definir</option>'+BUSINESS_LINES.map(x=>'<option value="'+x.key+'" '+(x.key===c.business_line?'selected':'')+'>'+esc(x.label)+'</option>').join("")+'</select></label>'+
         '<label>Perfil responsable<select id="detail-owner"><option value="">Sin asignar</option>'+ownerOptions+'</select></label>'+
         '<div class="strategy-inline-note">'+esc(strategyMeta(c.strategy)?.description || "Asigna una estrategia para trabajar este lead con un playbook específico.")+'</div>'+
         '<label class="span-2">Señal / contexto<textarea id="detail-signal" rows="2">'+esc(c.signal||"")+'</textarea></label>'+
@@ -653,6 +683,7 @@ function bindContactDetail(data) {
         body:{
           stage:$("#detail-stage").value,
           strategy:$("#detail-strategy").value,
+          businessLine:$("#detail-business-line").value,
           ownerUserId:$("#detail-owner").value || "",
           signal:$("#detail-signal").value,
           needSummary:$("#detail-need").value
@@ -753,6 +784,7 @@ async function loadPipeline() {
   const params=new URLSearchParams();
   if(state.pipelineOwner) params.set("owner",state.pipelineOwner);
   if(state.pipelineStrategy) params.set("strategy",state.pipelineStrategy);
+  if(state.pipelineBusinessLine) params.set("businessLine",state.pipelineBusinessLine);
 
   try {
     const data=await api("/contacts?"+params.toString());
@@ -789,6 +821,7 @@ function renderPipeline() {
           '<div class="lead-meta">'+
             (c.owner_name?'<span class="pill">'+esc(c.owner_name)+'</span>':'')+
             (c.strategy?'<span class="pill strategy-pill">'+esc(strategyLabel(c.strategy))+'</span>':'')+
+            (c.business_line?'<span class="pill">'+esc(businessLineLabel(c.business_line))+'</span>':'')+
             (c.target_score!=null?'<span class="pill">Score '+esc(c.target_score)+'</span>':'')+
             (c.signal?'<span class="pill gold" title="'+esc(c.signal)+'">señal</span>':'')+
           '</div>'+
