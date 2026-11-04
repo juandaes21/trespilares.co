@@ -1,0 +1,71 @@
+name: QA cuatro líneas - revisión segura
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "public/**"
+      - "backend/**"
+      - "tests/**"
+      - ".github/workflows/cuatro-lineas-qa.yml"
+  push:
+    branches: [feat/cuatro-lineas-patrimoniales-preview]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Sintaxis, simuladores y captación
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.1.0
+        with:
+          node-version: '22'
+      - name: Comprobar sintaxis JavaScript
+        run: |
+          node --check backend/crm.js
+          node --check backend/server.js
+          node --check backend/commercial.js
+          node --check backend/commercial-core.js
+          node --check backend/crm/app.js
+          node --check public/assets/js/calculadoras.js
+          node --check public/assets/js/comercial-interes.js
+      - name: Ejecutar pruebas sin secretos ni base de datos de producción
+        run: node --test tests/*.test.mjs
+
+  postgres-integration:
+    name: PostgreSQL aislado y API HTTP
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: tp_test
+          POSTGRES_PASSWORD: test_only
+          POSTGRES_DB: tp_preview
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U tp_test -d tp_preview"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgres://tp_test:test_only@127.0.0.1:5432/tp_preview
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.1.0
+        with:
+          node-version: '22'
+      - name: Instalar backend sin scripts de terceros
+        run: npm install --prefix backend --ignore-scripts --no-package-lock --no-audit --no-fund
+      - name: Probar esquema real PostgreSQL y endpoint con datos ficticios
+        run: node --test backend/tests/commercial-pg.test.mjs

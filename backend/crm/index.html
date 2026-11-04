@@ -102,6 +102,7 @@
           </div>
         </article>
 
+        <article class="panel" style="margin:18px 0"><div class="panel-head"><div><span class="eyebrow">CUATRO LÍNEAS</span><h2>Contactos por necesidad</h2></div></div><div id="dashboard-business-lines" class="stack-list"></div></article>
         <div class="grid-2 dashboard-main-grid">
           <article class="panel">
             <div class="panel-head"><div><span class="eyebrow">PIPELINE</span><h2>Avance comercial</h2></div><button class="text-action" data-go="pipeline">Ver pipeline</button></div>
@@ -130,6 +131,7 @@
             <p>Mueve cada relación según avance y cambia de estrategia para trabajar un playbook comercial distinto.</p>
           </div>
           <div class="pipeline-actions">
+            <select id="pipeline-business-line-filter" aria-label="Filtrar línea"><option value="">Todas las líneas</option><option value="vida_socios">Vida Socios</option><option value="legado">Legado</option><option value="brecha_pensional">Brecha pensional</option><option value="educacion">Educación</option></select>
             <select id="pipeline-owner-filter" aria-label="Filtrar pipeline por perfil"><option value="">Todos los perfiles</option></select>
             <button class="btn ghost" id="pipeline-refresh">Actualizar</button>
           </div>
@@ -181,6 +183,7 @@
       <section id="view-contacts" class="view">
         <div class="toolbar filters">
           <input id="contact-search" class="search-input" placeholder="Buscar por nombre, empresa, cargo…">
+          <select id="contact-business-line-filter"><option value="">Todas las líneas</option><option value="vida_socios">Vida Socios</option><option value="legado">Legado</option><option value="brecha_pensional">Brecha pensional</option><option value="educacion">Educación</option></select>
           <select id="contact-stage-filter"><option value="">Todas las etapas</option></select>
           <select id="contact-owner-filter"><option value="">Todos los perfiles</option></select>
           <select id="contact-strategy-filter">
@@ -202,7 +205,7 @@
         <article class="panel table-panel">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Contacto</th><th>Score</th><th>Etapa</th><th>Estrategia</th><th>Origen</th><th>Perfil</th><th>Próxima acción</th></tr></thead>
+              <thead><tr><th>Contacto</th><th>Score</th><th>Etapa</th><th>Estrategia</th><th>Línea</th><th>Origen</th><th>Perfil</th><th>Próxima acción</th></tr></thead>
               <tbody id="contacts-table"></tbody>
             </table>
           </div>
@@ -306,6 +309,7 @@
         <label>Email<input name="email" type="email"></label>
         <label>WhatsApp<input name="phone"></label>
         <label>Segmento<select name="segment"><option value="">Seleccionar</option><option>Profesional en crecimiento</option><option>Empresario / independiente</option><option>Familia</option><option>Patrimonio en transición</option></select></label>
+        <label>Línea de negocio<select name="businessLine"><option value="">Sin definir</option><option value="vida_socios">Vida Socios</option><option value="legado">Legado</option><option value="brecha_pensional">Brecha pensional</option><option value="educacion">Educación</option></select></label>
         <label>Estrategia <span class="required-mark">*</span><select name="strategy" required>
           <option value="">Seleccionar estrategia</option>
           <option value="corporate_talks">Charlas en empresas</option>
